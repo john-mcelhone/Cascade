@@ -1,0 +1,266 @@
+# Cascade Citation Registry
+# ========================
+# Hand-maintained mapping of citation strings to the equations actually
+# implemented in the corresponding loss model or slip factor.
+#
+# Format:
+#   citation_key: <exact string returned by .citation property>
+#   equations_implemented:
+#     - "Author YYYY eq. N.N"  (free text; human-readable summary)
+#   notes: >
+#     Optional explanatory notes.
+#
+# INVARIANT (CI-01): Every citation string found in the codebase by
+# check_citations.py must have an entry here. Add new entries when adding
+# new loss models or slip factors. Do not remove entries without removing
+# the corresponding code.
+#
+# Bootstrapped 2026-05-26.
+
+entries:
+  - citation_key: >-
+      Stanitz, J.D., 1952, 'Some Theoretical Aerodynamic Investigations
+      of Impellers in Radial- and Mixed-Flow Centrifugal Compressors',
+      Trans. ASME, 74, pp. 473–497.
+    equations_implemented:
+      - "Stanitz 1952 slip formula: sigma = 1 - 0.63*pi/Z"
+    notes: >
+      Used by StanitzSlip. Valid for radial-bladed (and near-radial) impellers.
+      The 0.63 factor is the published Stanitz constant.
+
+  - citation_key: >-
+      Wiesner, F.J., 1967, 'A Review of Slip Factors for
+      Centrifugal Impellers', Trans. ASME J. Eng. Power,
+      89(4), pp. 558–566.
+    equations_implemented:
+      - "Wiesner 1967 eq. 1: sigma = 1 - sqrt(sin(beta2'))/Z^0.7"
+      - "Wiesner 1967 geometric-limit correction for r1/r2 > epsilon_W"
+    notes: >
+      Used by WiesnerSlip (default). The geometric-limit correction prevents
+      over-prediction of slip factor in low-radius-ratio machines.
+
+  - citation_key: >-
+      Stodola, A., 1924, *Dampf- und Gasturbinen*, Springer,
+      Berlin. (English translation: Loewenstein, L.C., 1927,
+      *Steam and Gas Turbines*, McGraw-Hill.)
+    equations_implemented:
+      - "Stodola 1924: sigma = 1 - pi*sin(beta2')/Z"
+    notes: >
+      Used by StodolaSlip. One of the earliest slip factor formulas;
+      tends to under-predict sigma for strongly back-swept blades.
+
+  - citation_key: >-
+      Whitfield, A. & Baines, N.C., 1990, *Design of Radial
+      Turbomachines*, Longman, Ch. 6 §6.1–§6.4.
+      Tip clearance: Glassman 1976 NASA TN D-8164 eq. 11–13.
+      Disc friction: Daily & Nece 1960 ASME J. Basic Eng. 82(1).
+    equations_implemented:
+      - "Whitfield-Baines (1990) Ch.6 §6.1: incidence loss formula"
+      - "Whitfield-Baines (1990) Ch.6 §6.2: blade loading (passage) loss"
+      - "Whitfield-Baines (1990) Ch.6 §6.3: skin friction / profile loss"
+      - "Whitfield-Baines (1990) Ch.6 §6.4: secondary flow / tip clearance"
+      - "Glassman 1976 NASA TN D-8164 eq. 11-13: tip clearance loss"
+      - "Daily-Nece 1960 ASME J. Basic Eng. 82(1): disc friction (4-regime)"
+      - "Whitfield-Baines trailing edge / scroll / exducer exit loss"
+    notes: >
+      Used by WhitfieldBainesRadial (the default radial turbine loss model).
+      Daily-Nece 4-regime selector added per ADAPT-010.
+
+  - citation_key: >-
+      Aungier, R.H., 2000, *Centrifugal Compressors: A Strategy
+      for Aerodynamic Design and Analysis*, ASME Press, Ch. 6
+      (eq. 6.18 incidence, 6.34 blade loading, 6.41 skin friction,
+      6.45 tip clearance, 6.51 mixing, 6.58 disc friction,
+      6.61 recirculation [Oh-Yoon-Chung 1997], 6.66 leakage).
+    equations_implemented:
+      - "Aungier 2000 eq. 6.18: incidence loss (Conrad-Raghuram form)"
+      - "Aungier 2000 eq. 6.34: blade loading (diffusion-factor based)"
+      - "Aungier 2000 eq. 6.41: skin friction (passage profile loss)"
+      - "Aungier 2000 eq. 6.45 / Jansen-Pampreen: tip clearance"
+      - "Aungier 2000 eq. 6.51: jet-wake mixing (cos^2(beta2') form)"
+      - "Aungier 2000 eq. 6.58 + Daily-Nece 1960: disc friction"
+      - "Oh-Yoon-Chung 1997 (Aungier eq. 6.61): recirculation"
+      - "Aungier 2000 eq. 6.66: leakage (orifice-flow, Cd=0.816)"
+    notes: >
+      Used by AungierCentrifugal. The mixing (eq. 6.51) and leakage
+      (eq. 6.66) formulas were added in ADAPT-007. Daily-Nece 4-regime
+      disc friction added in ADAPT-010.
+
+  # W-32: Foil bearing K-C preset citations (W-32 AC4).
+  - citation_key: >-
+      Heshmat, H., Walowit, J.A., Pinkus, O., 1983,
+      'Analysis of Gas Lubricated Foil Journal Bearings',
+      J. Lubr. Technol. ASME 105(4), pp. 647-655.
+    equations_implemented:
+      - "Heshmat 1983 Fig. 5: direct stiffness K_yy vs. bearing number Lambda"
+      - "Heshmat 1983 Fig. 8: direct damping C_yy vs. bearing number Lambda"
+      - "Speed number Lambda = (6*mu*omega*L^2)/(pa*C^2) (Heshmat 1983 eq. 3)"
+    notes: >
+      Used by CAPSTONE_C30_FOIL_BEARING preset in
+      src/cascade/rotor/bearing_presets/foil_bearings.py.
+      K-C values derived from dimensional K-C charts at bearing number
+      Lambda corresponding to a 30 mm foil bearing at 100 kPa, 300 K.
+      Reference for v1 sparse 4-point table covering 10-80 kRPM.
+      W-32 foil bearing preset (W-32 AC4).
+
+  - citation_key: >-
+      DellaCorte, C. and Valco, M.J., 2000,
+      'Load Capacity Estimation of Foil Air Journal Bearings for
+      Oil-Free Turbomachinery Applications',
+      Tribol. Trans. 43(4), pp. 795-801. NASA TM-2000-209782.
+    equations_implemented:
+      - "DellaCorte-Valco 2000 Table 1: C1 load capacity coefficient for Gen I/II/III"
+      - "Load capacity formula: W = C1 * (D * L) * N (DellaCorte-Valco 2000 eq. 1)"
+      - "Gen III C1 = 1.8 N/mm2 (DellaCorte-Valco 2000, Table 1)"
+    notes: >
+      Used by DELLACORTE_NASA_FOIL_GEN_III preset in
+      src/cascade/rotor/bearing_presets/foil_bearings.py.
+      K-C table is derived by scaling Heshmat (1983) dimensionless charts to
+      Gen III geometry (D=50 mm, L=50 mm). Load capacity formula provides
+      the rated load at design speed for sizing checks.
+      W-32 foil bearing preset (W-32 AC4).
+
+  # ----------------------------------------------------------------------
+  # Material catalogue source citations.
+  # One entry per Material.source field in
+  # src/cascade/materials/database.py. Enforced both by
+  # tests/materials/test_materials_provenance.py and by this script.
+  # ----------------------------------------------------------------------
+
+  - citation_key: >-
+      Special Metals Corp., 'Inconel alloy 625' datasheet
+      (Publication SMC-063, 2013); cross-checked against
+      NIMS / NRIM Creep Data Sheet 7B.
+    equations_implemented:
+      - "Material(Inconel 625).source — annealed E/sigma_y/Sut/alpha/k/cp tables"
+    notes: >
+      Used by INCONEL_625 in src/cascade/materials/database.py
+      (annealed condition, 1093 C / 1 h, air cool).
+
+  - citation_key: >-
+      Special Metals Corp., 'Inconel alloy 718' datasheet
+      (Publication SMC-045, 2007), Table 3 (yield and
+      ultimate strength, solution + double-aged, AMS 5663);
+      also AMS 5662/5663 (solution treated + double aged).
+    equations_implemented:
+      - "Material(Inconel 718).source — solution + double-aged tables per AMS 5663 (Table 3 citation added, D-S6)"
+    notes: >
+      Used by INCONEL_718 in src/cascade/materials/database.py
+      (aero-engine HP-turbine disc baseline). D-S6: Table 3 reference
+      promoted from inline comment to source field per Closure I2.
+
+  - citation_key: >-
+      ASM Handbook Vol 1 (Properties and Selection: Irons,
+      Steels, and High-Performance Alloys, 10th ed.),
+      IN-738LC equiaxed-cast property tables (Section
+      'Nickel-base superalloys', Table 'Properties of
+      IN-738LC'). Cross-checked against Donachie &
+      Donachie, 'Superalloys: A Technical Guide,' 2nd ed.,
+      ASM 2002, Tables 16-6 and 16-9. Thermal properties
+      (c_p): Special Metals Corp. 'IN-738LC' datasheet,
+      Table 'Thermal Properties'.
+    equations_implemented:
+      - "Material(Inconel 738).source — IN-738LC equiaxed cast tables; c_p corrected D-S4"
+    notes: >
+      Used by INCONEL_738 in src/cascade/materials/database.py.
+      D-S3: ν flagged as family estimate. D-S4: c_p(RT) corrected to 395
+      J/(kg·K), SMC thermal properties table added to source.
+
+  - citation_key: >-
+      NASA TM-83655, 'Mechanical and Thermal Physical
+      Properties of MAR-M 247,' R. M. Harf, 1984, Table 2
+      (equiaxed polycrystalline cast, E = 213–215 GPa at
+      RT). Cross-checked against Kaufman, NASA CR-174852.
+      SC [001] E is ~124–130 GPa (Gell 1980, Metall.
+      Trans. 11A, Table 1); for SC design, override E
+      manually.
+    equations_implemented:
+      - "Material(MAR-M 247).source — equiaxed polycrystalline cast tables"
+    notes: >
+      Used by MAR_M_247 in src/cascade/materials/database.py.
+      Do NOT use this record for single-crystal FEA (SC [001] E ~ 124 GPa).
+
+  - citation_key: >-
+      MMPDS-13, Chapter 5 (Titanium), §5.4 (Ti-6Al-4V
+      Annealed); AMS 4928 plate spec. Cross-checked vs.
+      ASM Handbook Vol 2.
+    equations_implemented:
+      - "Material(Ti-6Al-4V).source — annealed Grade 5 tables, MMPDS-13 §5.4"
+    notes: >
+      Used by TI_6AL_4V in src/cascade/materials/database.py.
+      Maximum sustained service ~588 K (315 C).
+
+  - citation_key: >-
+      ASM Handbook Vol 1 (Properties and Selection: Irons,
+      Steels, and High-Performance Alloys), AISI 4340
+      tables (Boyer 1986 reprint); MMPDS-13 §2.3.1.0.
+    equations_implemented:
+      - "Material(AISI 4340).source — Q+T 425 C tables; S-N curve (R=-1, polished bar)"
+    notes: >
+      Used by AISI_4340 in src/cascade/materials/database.py
+      (quenched + tempered at 425 C, through-hardened).
+
+  - citation_key: >-
+      ASM Handbook Vol 1 (Properties and Selection: Irons,
+      Steels, and High-Performance Alloys, 10th ed.),
+      17-4PH H1025 condition tables (Section
+      'Precipitation-hardening stainless steels'); AK
+      Steel / Outokumpu '17-4PH Stainless Steel' product
+      data sheet (Table 2, H1025 mechanical properties);
+      Carpenter Technology '17-4PH Stainless Steel'
+      datasheet, Table 'Thermal and Physical Properties'
+      (H1025 thermal conductivity: 17.2 W/(m·K) at RT).
+    equations_implemented:
+      - "Material(17-4PH).source — H1025 tables; k corrected 18.0→17.2 W/(m·K) D-S9"
+    notes: >
+      Used by PH_17_4 in src/cascade/materials/database.py.
+      D-S9: k(RT) corrected from 18.0 to 17.2 W/(m·K) using Carpenter
+      thermophysical table (not the mechanical-properties table).
+
+  - citation_key: >-
+      ASTM A453 Grade 660 Class D (wrought A286 alloy
+      properties standard, Table 1 minimum mechanical
+      requirements, solution + aged condition); AMS 5731
+      (solution + age specification); Special Metals Corp.
+      'Incoloy A-286' datasheet (Publication SMC-024,
+      2004, Table 'Physical and Mechanical Properties').
+      σ_y(293 K) = 690 MPa is the ASTM A453 Grade 660
+      Class D minimum for the solution + aged condition
+      (Table 1).
+    equations_implemented:
+      - "Material(A286).source — σ_y corrected 660→690 MPa D-S1; source corrected A638→A453 D-S2"
+    notes: >
+      Used by A286 in src/cascade/materials/database.py.
+      D-S1: σ_y(293 K) corrected from 660 MPa (annealed) to 690 MPa
+      (ASTM A453 Grade 660 Class D minimum, aged). D-S2: erroneous
+      ASTM A638 citation (bolt dimensional spec) replaced with correct
+      ASTM A453 Grade 660 (properties standard).
+
+  - citation_key: >-
+      Haynes International, 'HAYNES(R) 282(R) alloy'
+      datasheet (Pub. H-3173, 2017), Table 'Physical
+      Properties' and Table 'Tensile Properties'
+      (solution-treated + aged condition, AMS 5951 heat
+      treatment, wrought bar).
+    equations_implemented:
+      - "Material(Haynes 282).source — σ_y(1000 K) corrected 580→620 MPa D-S7"
+    notes: >
+      Used by HAYNES_282 in src/cascade/materials/database.py.
+      D-S7: σ_y(1000 K) corrected from 580 MPa to 620 MPa per H-3173
+      Table 'Tensile Properties' (wrought-bar, solution + aged). 'wrought
+      bar' added to condition descriptor in source string.
+
+  - citation_key: >-
+      ASM Handbook Vol 1 (Properties and Selection: Irons,
+      Steels, and High-Performance Alloys, 10th ed.),
+      Section 'Wrought stainless steels', Table '316L
+      annealed properties'; Outokumpu '316/316L Stainless
+      Steel' product data sheet (Pub. EN 10088-2, grade
+      1.4404, 2022 rev.), Table 'Physical properties';
+      NIST SRM 1227 high-T thermophysical reference.
+    equations_implemented:
+      - "Material(316L).source — solution-annealed sheet/plate per AMS 5507"
+    notes: >
+      Used by SS_316L in src/cascade/materials/database.py.
+      Citation tightened in Closure G3 to add ASM section/table locator
+      and Outokumpu pub-ID (EN 10088-2 grade 1.4404, 2022 rev.).

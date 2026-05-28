@@ -1,0 +1,25 @@
+Cascade — open turbomachinery design environment
+Copyright (C) 2026 Cascade contributors
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as
+published by the Free Software Foundation, either version 3 of the
+License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+The Cascade Python SDK (the `cascade-sdk` package within this repository,
+located at packages/cascade-sdk/) is dual-licensed under the MIT License
+for permissive reuse in downstream industry tools. See packages/cascade-sdk/LICENSE
+for the MIT terms. (The SDK package is created in build milestone M38;
+this licensing intent is recorded here for early review.)
+
+The full text of the GNU Affero General Public License version 3 is at
+https://www.gnu.org/licenses/agpl-3.0.txt — and reproduced in this
+repository at LICENSE-AGPLv3.txt.

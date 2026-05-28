@@ -1,0 +1,37 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+.venv/
+venv/
+nodeenv/
+.logs/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+node_modules/
+.next/
+.turbo/
+.DS_Store
+*.log
+.env
+.env.local
+*.iml
+.idea/
+.vscode/
+
+# Local notes, research, and scratch docs — not part of the open-source release
+internal/
+
+# Stray media (videos don't belong in the repo)
+*.mp4
+
+# Worker artifacts
+.celery/
+celerybeat-schedule
