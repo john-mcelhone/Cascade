@@ -573,15 +573,32 @@ class RadialTurbineMeanline:
         w_actual = w_shaft
 
         # --- Polytropic (small-stage) efficiency --------------------------
-        # For a turbine, η_p = (γ−1)/γ · ln(T_01/T_02_actual) / ln(P_01/P_02)
-        # (Cumpsty, "Compressor Aerodynamics" §1.6; flipped sign for turbine).
+        # For a TURBINE (expansion), the small-stage efficiency is the ratio
+        # of the actual enthalpy drop to the isentropic enthalpy drop summed
+        # over infinitesimal stages:
+        #
+        #     η_p = ln(T_01/T_02_actual)
+        #           ─────────────────────────────
+        #           (γ−1)/γ · ln(P_01/P_02)
+        #
+        # because for an isentropic path T_02s/T_01 = (P_02/P_01)^((γ−1)/γ),
+        # so ln(T_01/T_02s) = (γ−1)/γ · ln(P_01/P_02). This is the RECIPROCAL
+        # structure of the compressor small-stage efficiency; for a turbine
+        # the "reheat" effect makes η_p slightly LOWER than η_tt (unlike a
+        # compressor, where η_p > η_tt). The previous code used the compressor
+        # form (γ−1)/γ · ln(PR)/ln(TR), which for a turbine evaluates to a
+        # value > 1 that then got clamped to 1.0 — i.e. it was never actually
+        # computed from the thermodynamic state. This now mirrors the
+        # centrifugal-compressor solver's small-stage definition, inverted for
+        # an expansion (Cumpsty, "Compressor Aerodynamics" §1.6; Dixon & Hall
+        # 7th ed. §1.8 turbine small-stage efficiency).
         if P_02 > 0 and T_02_actual > 0 and P_01 != P_02:
             ratio_T = T_01 / T_02_actual
             ratio_P = P_01 / P_02
-            if ratio_T > 0 and ratio_P > 1.0:
-                eta_polytropic = (math.log(ratio_P)
-                                  / max(math.log(ratio_T), 1e-9)
-                                  * (gamma - 1.0) / gamma)
+            if ratio_T > 1.0 and ratio_P > 1.0:
+                eta_polytropic = (math.log(ratio_T)
+                                  / ((gamma - 1.0) / gamma
+                                     * math.log(ratio_P)))
                 eta_polytropic = float(eta_polytropic)
             else:
                 eta_polytropic = float(eta_tt)
