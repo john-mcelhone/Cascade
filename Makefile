@@ -32,7 +32,7 @@ $(VENV)/bin/activate: pyproject.toml
 	$(PY) -m venv $(VENV)
 	$(VENV_PY) -m pip install --upgrade pip
 	$(VENV_PY) -m pip install -e ".[dev,api]"
-	$(VENV_PY) -m pip install fastapi 'uvicorn[standard]' sse-starlette trimesh pygltflib pydantic-settings httpx pytest-asyncio
+	$(VENV_PY) -m pip install fastapi 'uvicorn[standard]' python-multipart sse-starlette trimesh pygltflib pydantic-settings httpx pytest-asyncio
 	@touch $(VENV)/bin/activate
 
 setup: $(VENV)/bin/activate
