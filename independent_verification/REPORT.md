@@ -1,13 +1,13 @@
 # Independent Verification Report
 
-_Generated: 2026-06-01 01:27:48_
+_Generated: 2026-06-01 01:32:24_
 
 This report is intentionally coarse. It identifies the engineering area and the kind of physics implicated, but not the specific failing check, expected value, or assertion. Fix the underlying behaviour, not the test.
 
 ## Headline: ALL CHECKS PASS
 
-- Total checks: **165**
-- Passed: **165**
+- Total checks: **171**
+- Passed: **171**
 - Failed (outside accepted bounds): **0**
 - Needs review (could not run / skipped): **0**
 
@@ -15,7 +15,7 @@ This report is intentionally coarse. It identifies the engineering area and the 
 
 | Subsystem | Passed | Failed | Review |
 |-----------|-------:|-------:|-------:|
-| Cycle thermodynamics (0D Brayton) | 19 | 0 | 0 |
+| Cycle thermodynamics (0D Brayton) | 25 | 0 | 0 |
 | Journal bearing (hydrodynamic) | 8 | 0 | 0 |
 | Materials database | 53 | 0 | 0 |
 | Mean-line: centrifugal compressor | 11 | 0 | 0 |

@@ -26,6 +26,7 @@ from cascade.cycle import (  # noqa: E402
     Burner,
     Compressor,
     IdealGasFluid,
+    NasaFluid,
     Recuperator,
     RecuperatedBraytonSpec,
     SimpleBraytonSpec,
@@ -33,7 +34,7 @@ from cascade.cycle import (  # noqa: E402
     solve_cycle,
     solve_recuperated_brayton,
 )
-from cascade.units import Q  # noqa: E402
+from cascade.units import Composition, Port, Q  # noqa: E402
 
 GAMMA = 1.4
 CP = 1005.0
@@ -180,3 +181,52 @@ def test_recuperator_efficiency_monotonic_in_effectiveness() -> None:
             for eps in (0.2, 0.5, 0.8, 0.95)]
     for lo, hi in zip(etas, etas[1:]):
         assert hi > lo
+
+
+# --- Real-combustion path: conservation laws (air_standard=False) -----------
+
+LHV = 50.0e6
+ETA_COMB = 0.99
+
+
+def _combustion_spec() -> SimpleBraytonSpec:
+    inlet = Port(pressure_total=Q(101.325, "kPa"), temperature_total=Q(288.15, "K"),
+                 mass_flow=Q(2.0, "kg/s"), composition=Composition.air())
+    return SimpleBraytonSpec(
+        inlet_port=inlet,
+        compressor=Compressor(name="c", pressure_ratio=10.0, efficiency_isentropic=0.85),
+        burner=Burner(name="b", pressure_drop_fraction=0.03, combustion_efficiency=ETA_COMB,
+                      outlet_temperature=Q(1400.0, "K"), air_standard=False,
+                      fuel_lhv=Q(LHV, "J/kg")),
+        turbine=Turbine(name="t", pressure_ratio=10.0 / 1.03, efficiency_isentropic=0.88),
+    )
+
+
+@pytest.mark.parametrize("fluid", [IdealGasFluid(), NasaFluid()])
+def test_combustion_conserves_mass(fluid) -> None:  # noqa: ANN001
+    """Conservation of mass across the burner: turbine flow = air + fuel."""
+    r = solve_cycle(_combustion_spec(), fluid=fluid)
+    m_fuel = r.fuel_mass_flow.to("kg/s").magnitude
+    m_turbine = r.ports["t"].mass_flow.to("kg/s").magnitude
+    assert m_fuel > 0.0
+    assert m_turbine == pytest.approx(2.0 + m_fuel, rel=1e-6)
+
+
+@pytest.mark.parametrize("fluid", [IdealGasFluid(), NasaFluid()])
+def test_combustion_heat_input_matches_fuel_energy(fluid) -> None:  # noqa: ANN001
+    """First law at the burner: Q_in = m_fuel * LHV * combustion_efficiency."""
+    r = solve_cycle(_combustion_spec(), fluid=fluid)
+    m_fuel = r.fuel_mass_flow.to("kg/s").magnitude
+    q_in = r.heat_input.to("W").magnitude
+    assert q_in == pytest.approx(m_fuel * LHV * ETA_COMB, rel=1e-3)
+
+
+@pytest.mark.parametrize("fluid", [IdealGasFluid(), NasaFluid()])
+def test_combustion_products_composition_normalized(fluid) -> None:  # noqa: ANN001
+    """Mass fractions of the combustion products must be a valid distribution."""
+    r = solve_cycle(_combustion_spec(), fluid=fluid)
+    comp = r.ports["t"].composition
+    fracs = comp.mass_fractions if hasattr(comp, "mass_fractions") else comp
+    values = list(fracs.values())
+    assert all(-1e-9 <= v <= 1.0 + 1e-9 for v in values)
+    assert sum(values) == pytest.approx(1.0, abs=1e-6)
