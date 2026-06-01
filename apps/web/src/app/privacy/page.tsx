@@ -32,9 +32,6 @@ export default function PrivacyPage() {
           <Link href="/docs" className="hover:text-text">
             Docs
           </Link>
-          <Link href="/pricing" className="hover:text-text">
-            Pricing
-          </Link>
         </nav>
       </header>
 
@@ -289,9 +286,6 @@ export default function PrivacyPage() {
             </Link>
             <Link href="/privacy" className="font-medium text-text">
               Privacy
-            </Link>
-            <Link href="/pricing" className="hover:text-text">
-              Pricing
             </Link>
             <a
               href="mailto:services@americanturbines.com"

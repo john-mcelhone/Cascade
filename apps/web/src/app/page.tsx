@@ -43,12 +43,6 @@ export default function Home() {
           >
             Validation
           </Link>
-          <Link
-            href="/pricing"
-            className="hidden rounded-md px-2.5 py-1.5 transition-colors hover:bg-surface-subtle hover:text-text sm:block"
-          >
-            Pricing
-          </Link>
           <Link href="/projects" className="ml-1">
             <Button size="sm" className="h-8 gap-1.5 px-3">
               Open workspace
@@ -225,9 +219,6 @@ export default function Home() {
               <span>© 2026 American Turbines</span>
             </div>
             <div className="flex flex-wrap items-center justify-center gap-4">
-              <Link href="/pricing" className="hover:text-text">
-                Pricing
-              </Link>
               <Link href="/docs" className="hover:text-text">
                 Docs
               </Link>

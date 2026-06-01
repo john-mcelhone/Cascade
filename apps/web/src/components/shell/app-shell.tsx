@@ -7,15 +7,14 @@ import { BottomBar } from "./bottom-bar";
 import { CommandPalette } from "@/components/command-palette";
 
 /**
- * Top-level shell. Hides the app chrome on the marketing landing page (/),
- * /pricing, and the docs landing tree (/docs/...) — those surfaces want
+ * Top-level shell. Hides the app chrome on the marketing landing page (/)
+ * and the docs landing tree (/docs/...) — those surfaces want
  * full-bleed pages.
  */
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname() ?? "/";
   const isMarketing =
     pathname === "/" ||
-    pathname.startsWith("/pricing") ||
     pathname.startsWith("/terms") ||
     pathname.startsWith("/privacy");
   const isDocs = pathname.startsWith("/docs");
