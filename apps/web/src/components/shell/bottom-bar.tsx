@@ -17,7 +17,7 @@ export function BottomBar() {
   const isRunning = job.status === "running";
 
   return (
-    <footer className="flex h-bottombar shrink-0 items-center gap-3 border-t border-border-subtle bg-surface px-3 text-xs">
+    <footer className="glass flex h-bottombar shrink-0 items-center gap-3 border-t border-border-subtle px-3 text-xs">
       <div className="flex items-center gap-2 text-text-muted">
         {isRunning ? (
           <>

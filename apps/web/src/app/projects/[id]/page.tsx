@@ -16,6 +16,7 @@ import { PageHeader } from "@/components/shell/page-header";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { CoachMark } from "@/components/coach/coach-mark";
 import { useProject, useProjectDisplayName, useRuns } from "@/lib/api/hooks";
 import type { RunRecord } from "@/lib/api/types";
 import { fmtNumber } from "@/lib/utils";
@@ -116,25 +117,40 @@ export default function ProjectOverviewPage({ params }: PageProps) {
 
         {project && (
           <div className="flex flex-col gap-5">
+            <CoachMark id="project-overview" title="This is your project home.">
+              Each module below is a stage of the design. A typical flow runs
+              left-to-right: start in <strong>Cycle</strong>, then{" "}
+              <strong>Flow path</strong>, and finish in <strong>Rotor</strong>.
+              You can jump anywhere — and press{" "}
+              <kbd className="rounded border border-border-subtle bg-surface px-1 font-mono text-[10px]">
+                ⌘K
+              </kbd>{" "}
+              to go straight to a tool.
+            </CoachMark>
+
             <section>
               <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-text-muted">
                 Modules
               </h2>
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
                 {MODULE_CARDS.map((m) => (
-                  <Link key={m.key} href={m.href(id)} className="group block">
-                    <Card className="flex h-full items-start gap-3 p-4 transition-colors duration-fast hover:border-border-default">
-                      <div className="rounded-sm border border-border-subtle bg-surface-raised p-2">
-                        <m.Icon className="h-4 w-4 text-text-muted" />
+                  <Link
+                    key={m.key}
+                    href={m.href(id)}
+                    className="group block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                  >
+                    <Card className="flex h-full items-start gap-3 p-4 transition-all duration-medium ease-out group-hover:-translate-y-0.5 group-hover:border-border-default group-hover:shadow-z3">
+                      <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand-surface text-brand transition-colors group-hover:bg-brand-gradient group-hover:text-text-inverse">
+                        <m.Icon className="h-4 w-4" />
                       </div>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center justify-between gap-2">
-                          <h3 className="text-md font-medium text-text">
+                          <h3 className="text-md font-semibold tracking-tight text-text">
                             {m.label}
                           </h3>
-                          <ArrowUpRight className="h-3 w-3 text-text-muted opacity-0 transition-opacity group-hover:opacity-100" />
+                          <ArrowUpRight className="h-4 w-4 -translate-x-1 text-brand opacity-0 transition-all group-hover:translate-x-0 group-hover:opacity-100" />
                         </div>
-                        <p className="mt-1 text-sm text-text-muted">
+                        <p className="mt-1 text-sm leading-relaxed text-text-muted">
                           {m.blurb}
                         </p>
                       </div>

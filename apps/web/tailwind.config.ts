@@ -29,6 +29,7 @@ const config: Config = {
           pressed: "rgb(var(--brand-pressed) / <alpha-value>)",
           surface: "rgb(var(--brand-surface) / <alpha-value>)",
           text: "rgb(var(--brand-text) / <alpha-value>)",
+          accent: "rgb(var(--brand-accent) / <alpha-value>)",
         },
 
         // Surfaces
@@ -134,6 +135,11 @@ const config: Config = {
         lg: ["20px", "28px"],
         xl: ["28px", "36px"],
         "2xl": ["40px", "48px"],
+        // Display sizes for marketing / onboarding / hero surfaces. Tight
+        // tracking + leading are applied at the call site.
+        "3xl": ["52px", "58px"],
+        "4xl": ["68px", "72px"],
+        "5xl": ["88px", "92px"],
       },
 
       spacing: {
@@ -162,6 +168,8 @@ const config: Config = {
         z1: "var(--shadow-z1)",
         z2: "var(--shadow-z2)",
         z3: "var(--shadow-z3)",
+        z4: "var(--shadow-z4)",
+        glow: "var(--shadow-glow)",
       },
 
       transitionDuration: {
@@ -201,9 +209,25 @@ const config: Config = {
           "0%": { opacity: "0" },
           "100%": { opacity: "1" },
         },
+        "fade-in-up": {
+          "0%": { opacity: "0", transform: "translateY(8px)" },
+          "100%": { opacity: "1", transform: "translateY(0)" },
+        },
+        "scale-in": {
+          "0%": { opacity: "0", transform: "scale(0.97)" },
+          "100%": { opacity: "1", transform: "scale(1)" },
+        },
+        "pulse-ring": {
+          "0%": { boxShadow: "0 0 0 0 rgb(var(--brand-default) / 0.5)" },
+          "70%": { boxShadow: "0 0 0 8px rgb(var(--brand-default) / 0)" },
+          "100%": { boxShadow: "0 0 0 0 rgb(var(--brand-default) / 0)" },
+        },
       },
       animation: {
         "fade-in": "fade-in 100ms cubic-bezier(0.4, 0, 0.2, 1)",
+        "fade-in-up": "fade-in-up 480ms cubic-bezier(0.16, 1, 0.3, 1) both",
+        "scale-in": "scale-in 200ms cubic-bezier(0.16, 1, 0.3, 1) both",
+        "pulse-ring": "pulse-ring 2s cubic-bezier(0.4, 0, 0.2, 1) infinite",
       },
     },
   },

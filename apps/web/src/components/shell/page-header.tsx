@@ -30,7 +30,7 @@ export function PageHeader({
       {breadcrumb && breadcrumb.length > 0 && <Breadcrumb items={breadcrumb} />}
       <div className="flex items-start justify-between gap-3">
         <div className="flex flex-col gap-1">
-          <h1 className="text-lg font-medium text-text leading-tight">
+          <h1 className="text-lg font-semibold leading-tight tracking-tight text-text">
             {title}
           </h1>
           {description && (

@@ -68,7 +68,7 @@ export function LeftRail() {
     >
       <nav className="flex h-full flex-col px-2 py-3">
         {/* Global nav (always visible) */}
-        <div className="flex flex-col gap-0.5">
+        <div className="flex flex-col gap-1">
           {globalNav.map((item) => (
             <RailLink
               key={item.label}
@@ -94,7 +94,7 @@ export function LeftRail() {
             >
               Project
             </div>
-            <div className="flex flex-col gap-0.5">
+            <div className="flex flex-col gap-1">
               {projectNav.map((item) => {
                 const href = item.href(projectId);
                 return (
@@ -156,14 +156,28 @@ function RailLink({
       href={item.href()}
       aria-current={active ? "page" : undefined}
       className={cn(
-        "flex h-7 items-center gap-2 rounded-sm px-2 text-sm transition-colors duration-fast",
+        "group relative flex h-8 items-center gap-2.5 rounded-md px-2.5 text-sm transition-all duration-fast",
         active
-          ? "bg-brand-surface text-brand-text font-medium"
+          ? "bg-brand-surface font-medium text-brand-text"
           : "text-text-muted hover:bg-surface-subtle hover:text-text",
         collapsed && "justify-center px-0",
       )}
     >
-      <Icon className="h-4 w-4 shrink-0" />
+      {/* Active accent bar */}
+      <span
+        aria-hidden
+        className={cn(
+          "absolute left-0 top-1/2 h-4 w-0.5 -translate-y-1/2 rounded-full bg-brand transition-all duration-base",
+          active ? "opacity-100" : "opacity-0",
+          collapsed && "left-1",
+        )}
+      />
+      <Icon
+        className={cn(
+          "h-4 w-4 shrink-0 transition-colors",
+          active ? "text-brand" : "text-text-muted group-hover:text-text",
+        )}
+      />
       {!collapsed && <span className="truncate">{label}</span>}
     </Link>
   );

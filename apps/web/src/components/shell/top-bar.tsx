@@ -2,11 +2,11 @@
 
 import Link from "next/link";
 import { useParams, usePathname } from "next/navigation";
-import { Command, ChevronRight } from "lucide-react";
+import { Search, ChevronRight } from "lucide-react";
 import { Logo } from "./logo";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { ExperienceSwitcher } from "./experience-switcher";
 import { UserMenu } from "./user-menu";
-import { Button } from "@/components/ui/button";
 import { useUIStore } from "@/lib/stores/ui-store";
 import { useProject } from "@/lib/api/hooks";
 
@@ -21,40 +21,41 @@ export function TopBar() {
   const projectId = params?.id;
 
   return (
-    <header className="flex h-topbar shrink-0 items-center gap-3 border-b border-border-subtle bg-surface px-3">
+    <header className="glass sticky top-0 z-40 flex h-topbar shrink-0 items-center gap-2.5 border-b border-border-subtle px-3">
       <Link
         href="/"
-        className="rounded-sm px-1 py-0.5 -mx-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+        className="rounded-md px-1 py-0.5 -mx-1 transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
       >
         <Logo />
       </Link>
 
       {projectId ? (
         <>
-          <ChevronRight className="h-3 w-3 text-text-muted/60" />
+          <ChevronRight className="h-3 w-3 text-text-muted/50" />
           <ProjectCrumb id={projectId} />
         </>
       ) : pathname?.startsWith("/projects") ? (
         <>
-          <ChevronRight className="h-3 w-3 text-text-muted/60" />
+          <ChevronRight className="h-3 w-3 text-text-muted/50" />
           <span className="text-sm text-text-muted">Projects</span>
         </>
       ) : null}
 
-      <div className="ml-auto flex items-center gap-1">
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-7 gap-2 px-2"
+      <div className="ml-auto flex items-center gap-1.5">
+        <button
+          type="button"
           onClick={() => setPaletteOpen(true)}
-          aria-label="Open command palette"
+          aria-label="Search and run commands"
+          className="group flex h-7 items-center gap-2 rounded-md border border-border-subtle bg-surface-subtle/60 pl-2 pr-1.5 text-text-muted transition-colors hover:border-border-default hover:bg-surface-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
         >
-          <Command className="h-3 w-3" />
-          <span className="text-xs text-text-muted">Search</span>
-          <kbd className="ml-2 hidden rounded-sm border border-border-subtle bg-surface-subtle px-1 font-mono text-[10px] text-text-muted sm:inline-block">
+          <Search className="h-3.5 w-3.5" />
+          <span className="hidden text-xs sm:inline">Search or jump to…</span>
+          <kbd className="hidden rounded border border-border-subtle bg-surface px-1 font-mono text-[10px] sm:inline-block">
             ⌘K
           </kbd>
-        </Button>
+        </button>
+        <ExperienceSwitcher />
+        <div className="mx-0.5 hidden h-5 w-px bg-border-subtle sm:block" />
         <ThemeToggle />
         <UserMenu />
       </div>

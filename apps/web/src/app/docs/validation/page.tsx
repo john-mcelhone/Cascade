@@ -895,7 +895,7 @@ N_corr = N_dim  / √(T₀₁ / T_ref)                    [rpm]`}
             </div>
             <p className="text-xs mb-2">
               The Wiesner (1967) slip factor under-predicts for high-performance
-              back-swept impellers by ~5% (Eckardt Rotor A class, β₂' ≈ 60° from
+              back-swept impellers by ~5% (Eckardt Rotor A class, β₂&apos; ≈ 60° from
               tangential). Came &amp; Robinson 1999 §3.2 recommend a multiplicative
               correction of 1.05 for this wheel class. Cascade exposes this via{" "}
               <span className="font-mono">wiesner_calibration_scale</span> on the
