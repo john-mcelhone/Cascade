@@ -34,9 +34,6 @@ export default function TermsPage() {
           <Link href="/docs" className="hover:text-text">
             Docs
           </Link>
-          <Link href="/pricing" className="hover:text-text">
-            Pricing
-          </Link>
         </nav>
       </header>
 
@@ -302,9 +299,6 @@ export default function TermsPage() {
             </Link>
             <Link href="/privacy" className="hover:text-text">
               Privacy
-            </Link>
-            <Link href="/pricing" className="hover:text-text">
-              Pricing
             </Link>
             <a
               href="mailto:services@americanturbines.com"
