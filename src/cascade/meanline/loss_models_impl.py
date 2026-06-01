@@ -27,6 +27,7 @@ References (canonical):
 from __future__ import annotations
 
 import math
+import warnings
 from dataclasses import dataclass, field
 from typing import Any, Dict, Optional
 
@@ -146,6 +147,63 @@ def daily_nece_moment_coefficient(Re: float, s_over_R: float) -> float:
 # =============================================================================
 # Slip factors
 # =============================================================================
+#
+# SPEC_SHEET §13 / §15 — low-blade-count validity edge:
+#   §13: "Slip factor at Z < 3 (extrapolated; warning only)"
+#   §15: "Slip factor at Z = 1 or Z = 2 (clip with warning; don't extrapolate)"
+#
+# Below Z = 3 every published slip closure (Stanitz, Wiesner, Stodola) leaves
+# its fitted range and degenerates: for a radial-vaned blade (β₂' = 90°) the
+# raw formulas give σ ≤ 0 at Z = 1–2 (e.g. Stodola σ(Z=1) = 1 − π = −2.14,
+# Stanitz σ(Z=1) = 1 − 0.63π = −0.98, Wiesner σ(Z=1) = 0). A bare
+# max(0, σ) then SILENTLY returns the degenerate σ ≈ 0 — i.e. an impeller
+# that does essentially zero Euler work, which is non-physical and exactly
+# the unsafe extrapolation §13/§15 forbid.
+#
+# The safe behaviour mandated by the SPEC is: do NOT extrapolate the
+# correlation below its envelope; instead evaluate it at the validity floor
+# (Z_min = 3, the smallest blade count for which the correlations are
+# documented to be physical) and emit a `warnings.warn` so the caller knows
+# the result was clipped rather than computed at the requested Z. This yields
+# a finite, physical σ (e.g. Wiesner σ(Z=3, β'=90°) ≈ 0.537) instead of a
+# degenerate σ ≈ 0.
+
+SLIP_BLADE_COUNT_MIN: int = 3  # SPEC §13/§15 documented validity floor for Z
+
+
+def _clip_blade_count_with_warning(blade_count: int, model_name: str) -> int:
+    """Clip an out-of-envelope blade count to the slip-factor validity floor.
+
+    Per SPEC_SHEET §13 ("Slip factor at Z < 3 (extrapolated; warning only)")
+    and §15 ("Slip factor at Z = 1 or Z = 2 (clip with warning; don't
+    extrapolate)"), blade counts below :data:`SLIP_BLADE_COUNT_MIN` are
+    outside the fitted range of every published slip closure. Rather than
+    silently extrapolating to a degenerate σ ≈ 0, we clip Z to the floor and
+    emit a :class:`RuntimeWarning`.
+
+    Args:
+        blade_count: requested number of blades Z (must be ≥ 1; the geometry
+            dataclasses already reject Z < 1 / Z < 3 upstream, but the slip
+            closures are also called directly).
+        model_name: slip-model name, for an informative warning message.
+
+    Returns:
+        The blade count to use in the correlation: ``blade_count`` if it is
+        ≥ the floor, otherwise :data:`SLIP_BLADE_COUNT_MIN`.
+    """
+    if blade_count >= SLIP_BLADE_COUNT_MIN:
+        return blade_count
+    warnings.warn(
+        f"{model_name}: blade_count Z={blade_count} is below the slip-factor "
+        f"validity floor Z={SLIP_BLADE_COUNT_MIN} (SPEC_SHEET §13/§15). The "
+        f"correlation is not valid for Z < {SLIP_BLADE_COUNT_MIN}; clipping "
+        f"to Z={SLIP_BLADE_COUNT_MIN} to return a physical slip factor "
+        f"instead of extrapolating to a degenerate value. Treat the result "
+        f"as out-of-envelope.",
+        category=RuntimeWarning,
+        stacklevel=3,
+    )
+    return SLIP_BLADE_COUNT_MIN
 
 
 @dataclass(frozen=True)
@@ -176,9 +234,12 @@ class StanitzSlip:
                     radius_ratio_inducer_to_exit: float = 0.0) -> float:
         if blade_count < 1:
             raise ValueError(f"blade_count must be >= 1; got {blade_count}")
-        sigma = 1.0 - 0.63 * math.pi / blade_count
-        # Clip to physically allowed range. Stanitz never produces <0 for
-        # Z >= 2 (since 0.63·π = 1.98, σ(Z=2) = 0.01 > 0), but defensive.
+        # SPEC §13/§15: below the Z=3 validity floor the Stanitz fit
+        # degenerates (σ(Z=1) = 1 − 0.63π = −0.98, σ(Z=2) ≈ 0.01). Clip Z to
+        # the floor with a warning instead of returning a degenerate σ ≈ 0.
+        Z = _clip_blade_count_with_warning(blade_count, self.name)
+        sigma = 1.0 - 0.63 * math.pi / Z
+        # Clip to physically allowed range (defensive; σ(Z=3) ≈ 0.34 > 0).
         return max(0.0, min(1.0, sigma))
 
 
@@ -204,6 +265,13 @@ class WiesnerSlip:
     formulas agree precisely only as Z → ∞; at Z = 100 the difference is
     ≈ 0.02 (documented in `tests/meanline/test_slip_factor_limits.py` and
     `KNOWN_GAPS.md`).
+
+    Low-Z validity floor (SPEC_SHEET §13/§15): the Wiesner fit is documented
+    only for Z ≥ 3. Below that the deficit term sqrt(sin β')/Z^0.7 grows large
+    and σ degenerates (σ(Z=1, β'=90°) = 0). For Z < 3 the closure clips Z to
+    the validity floor (Z = 3) and emits a `RuntimeWarning` rather than
+    silently extrapolating to a degenerate slip factor — see
+    :func:`_clip_blade_count_with_warning`.
 
     Empirical calibration: Wiesner's published formula is known to be
     conservative for modern back-swept impellers with optimized meridional
@@ -231,10 +299,15 @@ class WiesnerSlip:
                     radius_ratio_inducer_to_exit: float = 0.0) -> float:
         if blade_count < 1:
             raise ValueError(f"blade_count must be >= 1; got {blade_count}")
+        # SPEC §13/§15: below the Z=3 validity floor the Wiesner fit
+        # degenerates (for a radial-vaned blade σ(Z=1) = 1 − sqrt(sin90°)/1
+        # = 0). Clip Z to the floor with a warning instead of silently
+        # returning the degenerate σ ≈ 0; σ(Z=3, β'=90°) ≈ 0.537 is physical.
+        Z = _clip_blade_count_with_warning(blade_count, self.name)
         beta = beta_2_from_tangential_rad
         # Wiesner core: σ = 1 - sqrt(sin β2') / Z^0.7
         sin_beta = max(0.0, math.sin(beta))  # clip ≥0 for sqrt
-        sigma_core = 1.0 - math.sqrt(sin_beta) / (blade_count ** 0.7)
+        sigma_core = 1.0 - math.sqrt(sin_beta) / (Z ** 0.7)
         sigma_core = max(0.0, min(1.0, sigma_core))
 
         # Geometric-limit correction
@@ -242,7 +315,7 @@ class WiesnerSlip:
             cos_beta = math.cos(beta)
             # ε_W can be > 1 (no correction needed) for low-Z or strong
             # back-sweep; expressly accept that case.
-            epsilon_W = math.exp(-8.16 * cos_beta / blade_count)
+            epsilon_W = math.exp(-8.16 * cos_beta / Z)
             if radius_ratio_inducer_to_exit > epsilon_W and epsilon_W < 1.0:
                 correction = 1.0 - ((radius_ratio_inducer_to_exit - epsilon_W)
                                     / (1.0 - epsilon_W)) ** 3
@@ -282,7 +355,15 @@ class StodolaSlip:
                     radius_ratio_inducer_to_exit: float = 0.0) -> float:
         if blade_count < 1:
             raise ValueError(f"blade_count must be >= 1; got {blade_count}")
-        sigma = 1.0 - math.pi * math.sin(beta_2_from_tangential_rad) / blade_count
+        # SPEC §13/§15: below the Z=3 validity floor the Stodola fit
+        # degenerates worst of all (σ(Z=1, β'=90°) = 1 − π = −2.14). Clip Z to
+        # the floor with a warning instead of silently extrapolating below the
+        # envelope. (Stodola is the most pessimistic closure at β'=90°; even at
+        # the Z=3 floor a purely radial blade lands near σ ≈ 0 — that is the
+        # documented character of the 1924 correlation, not an extrapolation
+        # artefact, so the final max(0, σ) bound applies as before.)
+        Z = _clip_blade_count_with_warning(blade_count, self.name)
+        sigma = 1.0 - math.pi * math.sin(beta_2_from_tangential_rad) / Z
         return max(0.0, min(1.0, sigma))
 
 

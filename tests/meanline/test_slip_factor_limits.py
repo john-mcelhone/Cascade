@@ -103,15 +103,45 @@ class TestSlipFactorAsymptotes:
 
 
 class TestSlipFactorPhysicalClips:
-    def test_wiesner_clips_to_zero_at_very_low_Z(self) -> None:
-        """At Z = 1, β' = 90°: σ = 1 - sqrt(1)/1 = 0. Z < 4 is
-        outside the slip-factor framework's validity, but
-        the formula must not return a negative or > 1 value (we clip)."""
+    def test_wiesner_clips_to_floor_with_warning_at_very_low_Z(self) -> None:
+        """SPEC_SHEET §13/§15: at Z < 3 the slip correlation is outside its
+        validity envelope. The raw Wiesner formula at Z = 1, β' = 90° gives
+        σ = 1 - sqrt(1)/1 = 0 — a degenerate (zero-Euler-work) result. The
+        solver must NOT silently extrapolate to that degenerate value; per
+        §15 ("Slip factor at Z = 1 or Z = 2 (clip with warning; don't
+        extrapolate)") it clips Z to the validity floor (Z = 3) and emits a
+        warning. The returned σ must therefore be the finite, physical
+        floor value σ(Z=3) ≈ 0.537, not 0."""
         w = WiesnerSlip()
-        sigma = w.slip_factor(blade_count=1,
-                              beta_2_from_tangential_rad=math.pi / 2)
+        sigma_floor = w.slip_factor(blade_count=3,
+                                    beta_2_from_tangential_rad=math.pi / 2)
+        with pytest.warns(RuntimeWarning, match=r"validity floor"):
+            sigma = w.slip_factor(blade_count=1,
+                                  beta_2_from_tangential_rad=math.pi / 2)
         assert 0.0 <= sigma <= 1.0
-        assert sigma == pytest.approx(0.0, abs=1e-9)
+        # Clipped to the Z=3 floor, not the degenerate σ = 0.
+        assert sigma == pytest.approx(sigma_floor, abs=1e-12)
+        assert sigma > 0.5
+
+    def test_slip_models_warn_and_clip_below_validity_floor(self) -> None:
+        """SPEC_SHEET §13/§15: all three slip closures clip Z < 3 to the
+        validity floor (Z = 3) and emit a RuntimeWarning, rather than
+        silently extrapolating to a degenerate slip factor. At the floor
+        (Z = 3) and above, no warning is emitted."""
+        import warnings as _w
+
+        beta = math.pi / 2  # radial-vaned (worst case for the deficit term)
+        for model in (WiesnerSlip(), StanitzSlip(), StodolaSlip()):
+            # Z = 3 (the floor) and above: must be silent.
+            with _w.catch_warnings():
+                _w.simplefilter("error")  # any warning becomes an error
+                sigma_floor = model.slip_factor(3, beta)
+            # Z = 1, 2: must warn and clip to the Z = 3 floor value.
+            for Z in (1, 2):
+                with pytest.warns(RuntimeWarning, match=r"validity floor"):
+                    sigma = model.slip_factor(Z, beta)
+                assert sigma == pytest.approx(sigma_floor, abs=1e-12), (
+                    f"{model.name}: Z={Z} should clip to the Z=3 floor value")
 
     def test_wiesner_geometric_limit_correction(self) -> None:
         """The Wiesner geometric correction kicks in when r̄₁/r₂ > ε_W
