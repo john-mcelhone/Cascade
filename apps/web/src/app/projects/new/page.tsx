@@ -2,10 +2,11 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { Wind, Flame, Network, Gauge } from "lucide-react";
+import { Wind, Flame, Network, Gauge, Check } from "lucide-react";
 import { PageHeader } from "@/components/shell/page-header";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { CoachMark } from "@/components/coach/coach-mark";
 
 type Template = {
   id: string;
@@ -80,6 +81,14 @@ export default function NewProjectPage() {
       />
 
       <div className="flex-1 overflow-auto scrollbar-subtle px-5 py-5">
+        <div className="mb-4">
+          <CoachMark id="new-project-pick" title="Pick a starting point.">
+            A template just pre-fills the deck so you&apos;re not staring at a
+            blank canvas — every parameter is still yours to change once the
+            project opens. The <strong>recuperated microturbine</strong> is the
+            best first project.
+          </CoachMark>
+        </div>
         <div className="grid gap-3 sm:grid-cols-2">
           {TEMPLATES.map((t) => {
             const active = picked?.id === t.id;
@@ -89,25 +98,41 @@ export default function NewProjectPage() {
                 onClick={() => setPicked(t)}
                 role="button"
                 tabIndex={0}
+                aria-pressed={active}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" || e.key === " ") {
                     e.preventDefault();
                     setPicked(t);
                   }
                 }}
-                className={`cursor-pointer p-4 transition-colors duration-fast hover:border-border-default ${
+                className={`relative cursor-pointer p-4 transition-all duration-medium ease-out hover:-translate-y-0.5 hover:shadow-z2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus ${
                   active
                     ? "border-brand bg-brand-surface/40 ring-1 ring-brand"
-                    : ""
+                    : "hover:border-border-default"
                 }`}
               >
+                {active && (
+                  <span className="absolute right-3 top-3 flex h-5 w-5 items-center justify-center rounded-full bg-brand text-text-inverse">
+                    <Check className="h-3 w-3" />
+                  </span>
+                )}
                 <div className="flex items-start gap-3">
-                  <div className="rounded-sm border border-border-subtle bg-surface-raised p-2">
-                    <t.Icon className="h-4 w-4 text-text-muted" />
+                  <div
+                    className={`flex h-9 w-9 items-center justify-center rounded-lg transition-colors ${
+                      active
+                        ? "bg-brand-gradient text-text-inverse shadow-z1"
+                        : "border border-border-subtle bg-surface-subtle text-text-subtle"
+                    }`}
+                  >
+                    <t.Icon className="h-4 w-4" />
                   </div>
-                  <div className="flex-1">
-                    <h3 className="text-md font-medium text-text">{t.name}</h3>
-                    <p className="mt-1 text-sm text-text-muted">{t.blurb}</p>
+                  <div className="flex-1 pr-6">
+                    <h3 className="text-md font-semibold tracking-tight text-text">
+                      {t.name}
+                    </h3>
+                    <p className="mt-1 text-sm leading-relaxed text-text-muted">
+                      {t.blurb}
+                    </p>
                   </div>
                 </div>
               </Card>

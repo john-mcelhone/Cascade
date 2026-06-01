@@ -9,6 +9,11 @@
  * so Tailwind's `rgb(var(--foo) / <alpha>)` notation works for every utility.
  *
  * Keep these in sync with tokens.json — that file is canonical.
+ *
+ * v0.2 design overhaul: the semantic palette below is preserved (WCAG-tuned),
+ * with additive expression tokens — layered elevation, brand gradients,
+ * aurora fields, glass surfaces, and a richer motion vocabulary — that give the
+ * product an Apple-grade finish without disturbing the accessible foundation.
  */
 
 @layer base {
@@ -41,6 +46,9 @@
     --brand-pressed: 31 85 94;             /* #1F555E */
     --brand-surface: 227 240 242;          /* #E3F0F2 */
     --brand-text: 31 85 94;                /* #1F555E */
+    /* Expression: a cooler companion hue for the brand gradient. */
+    --brand-accent: 38 128 156;            /* #26809C — teal→cyan lift */
+    --brand-glow: 63 139 150;              /* halo color for primary actions */
 
     /* Semantic — success */
     --success-default: 46 135 84;          /* #2E8754 */
@@ -80,10 +88,27 @@
     --chart-11: 72 120 181;                /* #4878B5 denim */
     --chart-12: 126 92 45;                 /* #7E5C2D bronze */
 
-    /* Shadows */
-    --shadow-z1: 0 1px 2px rgba(14, 15, 18, 0.06);
-    --shadow-z2: 0 4px 8px rgba(14, 15, 18, 0.08), 0 1px 2px rgba(14, 15, 18, 0.04);
-    --shadow-z3: 0 12px 24px rgba(14, 15, 18, 0.12), 0 2px 4px rgba(14, 15, 18, 0.08);
+    /* Elevation — layered, diffuse, daylight-soft. Two stacked shadows per
+     * level give a contact shadow plus an ambient cast (the Apple/Material
+     * approach), tuned light for white surfaces. */
+    --shadow-z1: 0 1px 2px rgba(14, 15, 18, 0.05), 0 1px 1px rgba(14, 15, 18, 0.03);
+    --shadow-z2: 0 2px 4px rgba(14, 15, 18, 0.06), 0 4px 12px rgba(14, 15, 18, 0.06);
+    --shadow-z3: 0 8px 16px rgba(14, 15, 18, 0.08), 0 16px 40px rgba(14, 15, 18, 0.12);
+    --shadow-z4: 0 16px 32px rgba(14, 15, 18, 0.10), 0 32px 64px rgba(14, 15, 18, 0.16);
+    /* A focused-element halo in brand teal. */
+    --shadow-glow: 0 0 0 1px rgb(var(--brand-default) / 0.4), 0 6px 20px rgb(var(--brand-glow) / 0.28);
+
+    /* Glass — translucent surface fills for floating chrome / overlays. */
+    --glass-fill: 255 255 255;
+    --glass-alpha: 0.72;
+    --glass-border: 255 255 255;
+    --glass-border-alpha: 0.6;
+
+    /* Aurora field — soft brand-tinted color stops for hero / canvas washes. */
+    --aurora-1: 63 139 150;                /* teal */
+    --aurora-2: 38 128 156;                /* cyan */
+    --aurora-3: 122 61 168;                /* violet */
+    --aurora-4: 46 135 84;                 /* emerald */
   }
 
   :root[data-theme="dark"] {
@@ -111,6 +136,8 @@
     --brand-pressed: 45 110 120;           /* #2D6E78 */
     --brand-surface: 31 59 64;             /* #1F3B40 */
     --brand-text: 159 207 214;             /* #9FCFD6 */
+    --brand-accent: 91 180 200;            /* #5BB4C8 */
+    --brand-glow: 91 165 176;
 
     --success-default: 70 165 107;         /* #46A56B */
     --success-surface: 27 60 40;           /* #1B3C28 */
@@ -130,13 +157,26 @@
     --info-default: 74 130 209;            /* #4A82D1 */
     --info-surface: 25 46 80;              /* #192E50 */
     --info-border: 46 79 132;              /* #2E4F84 */
-    --info-text: 166 195 236;              /* #A6C3EC */
+    --info-text: 166 195 236;             /* #A6C3EC */
 
     /* Chart palette unchanged in dark mode (categorical hand-tuned for both). */
 
+    /* Elevation — deeper, with a hairline top highlight handled by utilities. */
     --shadow-z1: 0 1px 2px rgba(0, 0, 0, 0.4);
-    --shadow-z2: 0 4px 8px rgba(0, 0, 0, 0.5);
-    --shadow-z3: 0 12px 24px rgba(0, 0, 0, 0.7);
+    --shadow-z2: 0 2px 6px rgba(0, 0, 0, 0.45), 0 6px 16px rgba(0, 0, 0, 0.4);
+    --shadow-z3: 0 10px 24px rgba(0, 0, 0, 0.55), 0 20px 48px rgba(0, 0, 0, 0.5);
+    --shadow-z4: 0 18px 40px rgba(0, 0, 0, 0.6), 0 36px 72px rgba(0, 0, 0, 0.55);
+    --shadow-glow: 0 0 0 1px rgb(var(--brand-default) / 0.5), 0 6px 24px rgb(var(--brand-glow) / 0.4);
+
+    --glass-fill: 36 40 47;
+    --glass-alpha: 0.72;
+    --glass-border: 255 255 255;
+    --glass-border-alpha: 0.08;
+
+    --aurora-1: 63 139 150;
+    --aurora-2: 38 128 156;
+    --aurora-3: 122 61 168;
+    --aurora-4: 46 135 84;
   }
 
   /* Body defaults */
@@ -149,6 +189,13 @@
     font-feature-settings: "tnum", "ss01", "cv11";
     font-variant-numeric: tabular-nums slashed-zero;
     min-height: 100%;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Headings get optical sizing + tighter tracking for display confidence. */
+  h1, h2, h3, h4 {
+    font-feature-settings: "ss01", "cv11";
   }
 
   /* Always tabular numerals on numeric / monospace surfaces */
@@ -162,10 +209,12 @@
     background-color: rgb(var(--brand-default) / 0.25);
   }
 
-  /* Focus rings — see DESIGN_SYSTEM §9. 2 px ring with 2 px offset. */
+  /* Focus rings — see DESIGN_SYSTEM §9. 2 px ring with 2 px offset, plus a
+   * soft brand halo for a more refined, less harsh focus state. */
   :focus-visible {
     outline: 2px solid rgb(var(--border-focus));
     outline-offset: 2px;
+    border-radius: 3px;
   }
 
   /* Reduced motion: collapse most transitions per DESIGN_SYSTEM §7. */
@@ -181,6 +230,62 @@
   }
 }
 
+@layer components {
+  /* Glass chrome — translucent, blurred floating surfaces (top bar, palette,
+   * popovers that want to read the content beneath them). Falls back to a
+   * solid surface where backdrop-filter is unsupported. Owns fill + blur only;
+   * callers set their own token border so the hairline reads in both themes. */
+  .glass {
+    background-color: rgb(var(--glass-fill) / var(--glass-alpha));
+  }
+  @supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
+    .glass {
+      -webkit-backdrop-filter: saturate(180%) blur(20px);
+      backdrop-filter: saturate(180%) blur(20px);
+    }
+  }
+
+  /* Brand gradient fills — for primary CTAs and accent marks. */
+  .bg-brand-gradient {
+    background-image: linear-gradient(
+      135deg,
+      rgb(var(--brand-hover)) 0%,
+      rgb(var(--brand-default)) 55%,
+      rgb(var(--brand-accent)) 100%
+    );
+  }
+  .text-brand-gradient {
+    background-image: linear-gradient(
+      120deg,
+      rgb(var(--brand-default)),
+      rgb(var(--brand-accent))
+    );
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  /* Aurora — a soft, slowly drifting multi-stop color field for hero and
+   * empty-canvas washes. Sits behind content at low opacity. */
+  .aurora {
+    background-image:
+      radial-gradient(40rem 40rem at 12% -10%, rgb(var(--aurora-1) / 0.20), transparent 60%),
+      radial-gradient(36rem 36rem at 90% 0%, rgb(var(--aurora-2) / 0.18), transparent 55%),
+      radial-gradient(44rem 44rem at 75% 100%, rgb(var(--aurora-3) / 0.14), transparent 60%),
+      radial-gradient(32rem 32rem at 5% 95%, rgb(var(--aurora-4) / 0.12), transparent 55%);
+    background-repeat: no-repeat;
+  }
+  .aurora-animated {
+    background-size: 200% 200%;
+    animation: aurora-drift 24s ease-in-out infinite alternate;
+  }
+
+  /* Hairline highlight on raised surfaces (Apple's "edge light"). */
+  .edge-light {
+    box-shadow: inset 0 1px 0 0 rgb(255 255 255 / 0.04);
+  }
+}
+
 /* Scrollbar styling — subtle, matches surface tokens. */
 @layer utilities {
   .scrollbar-subtle::-webkit-scrollbar {
@@ -191,13 +296,49 @@
   .scrollbar-subtle::-webkit-scrollbar-thumb {
     background-color: rgb(var(--border-default) / 0.5);
     border-radius: 4px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
   }
 
   .scrollbar-subtle::-webkit-scrollbar-thumb:hover {
     background-color: rgb(var(--border-default));
+    background-clip: padding-box;
   }
 
   .scrollbar-subtle::-webkit-scrollbar-track {
     background: transparent;
   }
+
+  /* Animation utilities used across hero / cards / overlays. Pair with
+   * inline `animation-delay` for staggered reveals. */
+  .animate-fade-in-up {
+    animation: fade-in-up 480ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  .animate-scale-in {
+    animation: scale-in 200ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  .animate-shimmer {
+    background-size: 200% 100%;
+    animation: shimmer 1.4s linear infinite;
+  }
+}
+
+@keyframes fade-in-up {
+  0% { opacity: 0; transform: translateY(8px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes scale-in {
+  0% { opacity: 0; transform: scale(0.97); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+@keyframes aurora-drift {
+  0% { background-position: 0% 50%; }
+  100% { background-position: 100% 50%; }
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { CircleUser, LogOut, Settings, User } from "lucide-react";
+import { CircleUser, LogOut, Settings, User, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -10,12 +10,15 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useUIStore } from "@/lib/stores/ui-store";
 
 /**
  * User menu in the top bar. In v1 there is no real auth; this shows a
  * mocked identity (John, american turbines) and stubs the actions.
  */
 export function UserMenu() {
+  const resetOnboarding = useUIStore((s) => s.resetOnboarding);
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -44,6 +47,10 @@ export function UserMenu() {
         <DropdownMenuItem>
           <Settings className="h-3 w-3" />
           Account settings
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => resetOnboarding()}>
+          <Sparkles className="h-3 w-3" />
+          Restart guided tour
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem>
