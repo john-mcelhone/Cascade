@@ -165,7 +165,7 @@ export default function MapPage({ params }: PageProps) {
           { label: "Map" },
         ]}
         title="Performance map"
-        description="Mass flow × rpm. Surge line in danger; choke line in info. Every point carries an explicit status code — no ambiguous −1s."
+        description="Mass flow × rpm. Surge line in danger; choke line in info. Every point carries an explicit status code — no ambiguous −1s. Computed from reference geometry — candidate geometry does not yet feed the map (KG-PLAT-03)."
         actions={
           <>
             <Button

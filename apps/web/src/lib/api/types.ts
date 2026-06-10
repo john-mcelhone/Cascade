@@ -145,6 +145,26 @@ export interface CycleResult {
   components: CycleComponentResult[];
   /** Plotted cycle states for the T-s diagram (numbered). */
   states: CycleStatePoint[];
+  /**
+   * Converged η actually used per rotor, keyed by component name (e.g.
+   * "C1"). In live mean-line mode this is the geometry-derived value, not
+   * the stored efficiency_isentropic. Empty on failure envelopes.
+   */
+  componentEfficiencies?: Record<string, number>;
+  /**
+   * Efficiency mode the solve ACTUALLY used per rotor (solver convention:
+   * "constant" | "polytropic" | "live_meanline").
+   */
+  efficiencyModes?: Record<string, string>;
+  /**
+   * Efficiency mode the user's params REQUESTED per rotor (pre-fallback).
+   * Differs from `efficiencyModes` when live mean-line was requested with
+   * no geometry attached and the solver fell back to constant η — U9 /
+   * ADAPT-045: the fallback is surfaced, never silent.
+   */
+  requestedEfficiencyModes?: Record<string, string>;
+  /** Explicit per-rotor flag: live mean-line requested but the solve fell back. */
+  efficiencyFallbacks?: Record<string, boolean>;
   /** Populated when the solver didn't converge or threw. */
   failure?: CycleFailure;
 }

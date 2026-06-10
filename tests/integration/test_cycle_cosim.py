@@ -358,8 +358,18 @@ class TestCycleCosimAC5FailureTaxonomy:
     """
 
     def test_bad_geometry_falls_back_to_constant_mode(self) -> None:
-        """Missing geometry_params → graceful fallback to constant mode."""
-        from apps.api.routers.cycle import _build_recuperated_spec
+        """ABSENT geometry_params → fallback to constant mode (retained).
+
+        ADAPT-045 (U9) keeps this fallback for robustness but surfaces it:
+        the worker payload's requested_efficiency_modes records the
+        live_meanline request alongside the actual constant mode. Only the
+        attached-but-incomplete case now refuses (see
+        TestCycleCosimGeometryBuilders).
+        """
+        from apps.api.routers.cycle import (
+            _build_recuperated_spec,
+            _requested_efficiency_modes,
+        )
 
         # No geometry_params supplied despite live_meanline mode.
         project = _capstone_c30_project(
@@ -374,6 +384,9 @@ class TestCycleCosimAC5FailureTaxonomy:
             "are absent"
         )
         assert spec.compressor.meanline_geometry is None
+        # U9: the fallback has a data source — the requested map still says
+        # live_meanline, so the payload can flag the downgrade.
+        assert _requested_efficiency_modes(project)["C1"] == "live_meanline"
 
     def test_classify_failure_handles_live_meanline_regime_refused(self) -> None:
         """_classify_failure produces a structured 'design' payload for
@@ -422,7 +435,19 @@ class TestCycleCosimAC5FailureTaxonomy:
 
 
 class TestCycleCosimGeometryBuilders:
-    """Unit tests for the geometry builder helpers added in W-03."""
+    """Unit tests for the geometry builder helpers added in W-03.
+
+    ADAPT-045 (U9) contract — strictly more restrictive than the W-03
+    graceful-degradation doctrine it supersedes (R7 exemption, recorded in
+    internal/ADAPTATIONS.md):
+
+      - geometry ABSENT (no ``geometry_params`` key / empty dict) →
+        ``None`` and the caller falls back to constant η (unchanged,
+        now surfaced in the result payload);
+      - geometry ATTACHED but missing required keys →
+        ``GeometryParamsIncomplete`` design-class refusal naming the
+        missing field(s) — previously a silent ``None`` fallback.
+    """
 
     def test_build_compressor_geometry_returns_none_when_no_geom_params(
         self,
@@ -432,16 +457,36 @@ class TestCycleCosimGeometryBuilders:
         result = _build_compressor_geometry({})
         assert result is None
 
-    def test_build_compressor_geometry_returns_none_missing_required(
+    def test_build_compressor_geometry_refuses_missing_required(
         self,
     ) -> None:
-        from apps.api.routers.cycle import _build_compressor_geometry
+        """ADAPT-045: attached-but-incomplete geometry refuses design-class.
+
+        Supersedes ``test_build_compressor_geometry_returns_none_missing_required``,
+        which pinned the W-03 silent fallback (return ``None`` → constant η
+        with only a server-side log line). Refusal-over-guess (SPEC_SHEET
+        §13): a partial bag cannot produce a trustworthy η.
+        """
+        from apps.api.routers.cycle import (
+            GeometryParamsIncomplete,
+            _build_compressor_geometry,
+        )
 
         # Partial geometry_params — missing most required fields.
-        result = _build_compressor_geometry(
-            {"geometry_params": {"blade_count": 16}}
-        )
-        assert result is None
+        with pytest.raises(GeometryParamsIncomplete) as exc_info:
+            _build_compressor_geometry(
+                {"geometry_params": {"blade_count": 16}}
+            )
+        exc = exc_info.value
+        assert exc.code == "GEOMETRY_PARAMS_INCOMPLETE"
+        # The refusal names the missing key(s)...
+        assert "impeller_outlet_radius" in str(exc)
+        assert "inducer_tip_radius" in str(exc)
+        # ...and never the one that IS present.
+        assert "blade_count" not in exc.missing
+        # Actionable suggestions: re-send from candidate detail, or detach.
+        assert any("Send to cycle" in s for s in exc.suggestions)
+        assert any("detach" in s.lower() for s in exc.suggestions)
 
     def test_build_compressor_geometry_success(self) -> None:
         from apps.api.routers.cycle import _build_compressor_geometry
@@ -458,3 +503,22 @@ class TestCycleCosimGeometryBuilders:
 
         result = _build_turbine_geometry({})
         assert result is None
+
+    def test_build_turbine_geometry_refuses_missing_required(self) -> None:
+        """ADAPT-045: the turbine builder refuses identically (symmetric
+        contract — refusal semantics on one rotor and silent fallback on
+        the other would be incoherent)."""
+        from apps.api.routers.cycle import (
+            GeometryParamsIncomplete,
+            _build_turbine_geometry,
+        )
+
+        with pytest.raises(GeometryParamsIncomplete) as exc_info:
+            _build_turbine_geometry(
+                {"geometry_params": {"blade_count": 12}}
+            )
+        exc = exc_info.value
+        assert exc.code == "GEOMETRY_PARAMS_INCOMPLETE"
+        assert exc.component_kind == "Turbine"
+        assert "rotor_inlet_radius" in str(exc)
+        assert "blade_count" not in exc.missing

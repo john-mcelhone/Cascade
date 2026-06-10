@@ -80,6 +80,38 @@ class MissingRequiredComponents(ValueError):
         )
 
 
+class GeometryParamsIncomplete(ValueError):
+    """Raised by the rotor geometry builders when ``geometry_params`` is
+    ATTACHED to the component but missing required keys.
+
+    U9 doctrine (ADAPT-045 — supersedes the W-03 graceful-degradation rule
+    for the attached-but-invalid case): a partial geometry bag is a
+    user-input problem the solver must refuse, never silently paper over
+    with constant-η — refusal-over-guess (SPEC_SHEET §13). Geometry that is
+    entirely ABSENT still falls back to constant η; that fallback is
+    surfaced via the result payload's ``requested_efficiency_modes`` /
+    ``efficiency_fallbacks``.
+
+    The ``code`` attribute mirrors ``RegimeOutOfValidity.code`` so the
+    worker's ``_refusal_cause_code`` picks it up automatically.
+    """
+
+    CAUSE_CODE = "GEOMETRY_PARAMS_INCOMPLETE"
+
+    def __init__(self, component_kind: str, missing: List[str]) -> None:
+        self.component_kind = component_kind
+        self.missing = list(missing)
+        super().__init__(
+            f"{component_kind} geometry_params is attached but missing "
+            "required field(s): " + ", ".join(self.missing) + "."
+        )
+        self.code = self.CAUSE_CODE
+        self.suggestions = [
+            "Re-send the geometry from a candidate detail page in Flow Path — 'Send to cycle' writes the full key set.",
+            "Or detach the geometry from this component; with no geometry attached the solve falls back to constant isentropic η (flagged in the result).",
+        ]
+
+
 class BurnerSpecInvalid(ValueError):
     """Raised by ``_build_recuperated_spec`` when the Burner params bag
     cannot yield exactly one valid specification.
@@ -137,6 +169,25 @@ def _normalise_efficiency_mode(raw: str) -> str:
         "live_meanline": "live_meanline",
     }
     return _MAP.get(str(raw), "constant")
+
+
+def _requested_efficiency_modes(project: Dict[str, Any]) -> Dict[str, str]:
+    """Map rotor component name → the normalised efficiency mode the user's
+    params REQUESTED, before any fallback.
+
+    The spec builder downgrades ``live_meanline`` to ``constant`` when no
+    geometry is attached, so the result payload's ``efficiency_modes``
+    (read back from the built spec) records only the ACTUAL mode. Comparing
+    this map against it is how callers detect the fallback — U9 / ADAPT-045:
+    the fallback is surfaced, never silent.
+    """
+    out: Dict[str, str] = {}
+    for c in project.get("components", []) or []:
+        if c.get("kind") not in ("Compressor", "Turbine"):
+            continue
+        raw = str(c.get("params", {}).get("efficiency_mode", "isentropic"))
+        out[str(c.get("name", c.get("id", "?")))] = _normalise_efficiency_mode(raw)
+    return out
 
 
 def _resolve_burner_spec_mode(bp: Dict[str, Any]) -> str:
@@ -208,8 +259,14 @@ def _burner_fuel_mass_flow_quantity(bp: Dict[str, Any]):
 def _build_compressor_geometry(params: Dict[str, Any]):
     """Build a CentrifugalCompressorGeometry from the component params dict.
 
-    Returns the geometry object on success, or None if required fields are
-    absent (the caller falls back to 'constant' mode with a logged warning).
+    Returns the geometry object on success, or None when ``geometry_params``
+    is absent entirely (the caller falls back to 'constant' mode — surfaced
+    to the user via the result payload's requested-vs-actual modes, U9).
+
+    Raises ``GeometryParamsIncomplete`` (design-class) when the bag is
+    ATTACHED but missing required keys, and ``HTTPException(422)`` for an
+    unknown unit string — both classify design-class when raised in-worker
+    (ADAPT-045: refusal-over-guess for attached-but-invalid geometry).
 
     All geometry fields use SI base units internally.  The project params
     dict may store them as {value, unit} quantity dicts (the same pattern
@@ -263,12 +320,10 @@ def _build_compressor_geometry(params: Dict[str, Any]):
     ]
     missing = [k for k in required if gp.get(k) is None]
     if missing:
-        log.warning(
-            "W-03: Compressor geometry_params missing required fields %s; "
-            "falling back to constant-η mode.",
-            missing,
-        )
-        return None
+        # U9 / ADAPT-045: an attached-but-incomplete bag refuses design-class
+        # (it previously fell back to constant-η with only a log line — see
+        # the superseded W-03 doctrine recorded in internal/ADAPTATIONS.md).
+        raise GeometryParamsIncomplete("Compressor", missing)
 
     try:
         from cascade.meanline import CentrifugalCompressorGeometry
@@ -290,9 +345,14 @@ def _build_compressor_geometry(params: Dict[str, Any]):
         # so the unknown-unit 422 propagates to the HTTP layer.
         raise
     except Exception as exc:
+        # Construction failed despite a complete key set (e.g. a value the
+        # geometry dataclass rejects). The fallback to constant-η stands for
+        # robustness, but it is no longer silent: the result payload's
+        # requested-vs-actual efficiency modes flag it to the user (U9).
         log.warning(
-            "W-03: Could not construct CentrifugalCompressorGeometry: %s; "
-            "falling back to constant-η mode.",
+            "W-03/U9: Could not construct CentrifugalCompressorGeometry: %s; "
+            "falling back to constant-η mode (surfaced via "
+            "requested_efficiency_modes).",
             exc,
         )
         return None
@@ -301,8 +361,11 @@ def _build_compressor_geometry(params: Dict[str, Any]):
 def _build_turbine_geometry(params: Dict[str, Any]):
     """Build a RadialTurbineGeometry from the component params dict.
 
-    Returns the geometry object on success, or None if required fields are
-    absent.
+    Returns the geometry object on success, or None when ``geometry_params``
+    is absent entirely (constant-η fallback, surfaced via the result
+    payload's requested-vs-actual modes). Raises ``GeometryParamsIncomplete``
+    when the bag is attached but missing required keys (ADAPT-045 —
+    identical contract to ``_build_compressor_geometry``).
     """
     import logging
     import math
@@ -354,12 +417,9 @@ def _build_turbine_geometry(params: Dict[str, Any]):
     ]
     missing = [k for k in required if gp.get(k) is None]
     if missing:
-        log.warning(
-            "W-03: Turbine geometry_params missing required fields %s; "
-            "falling back to constant-η mode.",
-            missing,
-        )
-        return None
+        # U9 / ADAPT-045: attached-but-incomplete refuses design-class —
+        # symmetric with the compressor builder.
+        raise GeometryParamsIncomplete("Turbine", missing)
 
     try:
         from cascade.meanline import RadialTurbineGeometry
@@ -381,9 +441,13 @@ def _build_turbine_geometry(params: Dict[str, Any]):
         # so the unknown-unit 422 propagates to the HTTP layer.
         raise
     except Exception as exc:
+        # See the compressor builder: complete key set but construction
+        # failed — fallback retained, surfaced via requested-vs-actual
+        # efficiency modes in the result payload (U9).
         log.warning(
-            "W-03: Could not construct RadialTurbineGeometry: %s; "
-            "falling back to constant-η mode.",
+            "W-03/U9: Could not construct RadialTurbineGeometry: %s; "
+            "falling back to constant-η mode (surfaced via "
+            "requested_efficiency_modes).",
             exc,
         )
         return None
@@ -449,10 +513,19 @@ def _build_recuperated_spec(project: Dict[str, Any]):
     # _normalise_efficiency_mode() maps between the two conventions.
     #
     # For "live_meanline" we also read geometry_params from the same dict and
-    # build the appropriate geometry object (option A per W-03 spec).  If
-    # geometry_params are absent or invalid, we fall back to "constant" mode
-    # with a logged warning rather than crashing — graceful degradation is
-    # a hard requirement (W-03 risk mitigation).
+    # build the appropriate geometry object (option A per W-03 spec).
+    #
+    # U9 doctrine (ADAPT-045 — supersedes the W-03 "graceful degradation is
+    # a hard requirement" rule for invalid geometry):
+    #   - geometry ABSENT (no geometry_params on the component): fall back
+    #     to "constant" η so a bare canvas still solves, but the fallback is
+    #     SURFACED — the result payload carries requested_efficiency_modes /
+    #     efficiency_fallbacks alongside the actual efficiency_modes, and
+    #     the UI renders the per-rotor attribution + fallback warning.
+    #   - geometry ATTACHED but incomplete (missing required keys) or
+    #     carrying an unknown unit: design-class REFUSAL
+    #     (GeometryParamsIncomplete / UNKNOWN_UNIT) — refusal-over-guess,
+    #     SPEC_SHEET §13. The builders raise; nothing here swallows it.
     comp_raw_mode = str(
         comp_dict["params"].get("efficiency_mode", "isentropic")
     )
@@ -462,7 +535,8 @@ def _build_recuperated_spec(project: Dict[str, Any]):
     if comp_mode == "live_meanline":
         comp_geometry = _build_compressor_geometry(comp_dict["params"])
         if comp_geometry is None:
-            # Graceful fallback: no geometry → can't run meanline co-sim.
+            # Absent-geometry fallback — surfaced via the payload's
+            # requested-vs-actual efficiency modes (U9 / ADAPT-045).
             comp_mode = "constant"
         else:
             # RPM for the meanline solve: prefer an explicit field, else use
@@ -480,6 +554,7 @@ def _build_recuperated_spec(project: Dict[str, Any]):
     if turb_mode == "live_meanline":
         turb_geometry = _build_turbine_geometry(turb_dict["params"])
         if turb_geometry is None:
+            # Absent-geometry fallback — surfaced, see compressor above.
             turb_mode = "constant"
         else:
             rpm_val = turb_dict["params"].get("meanline_rpm_rpm")
@@ -885,6 +960,50 @@ def _classify_failure(exc: BaseException) -> Dict[str, Any]:
             "suggestions": exc.suggestions,
         }
 
+    # U9 / ADAPT-045: geometry_params attached to a rotor but missing
+    # required keys. A user-input problem — refuse design-class, naming the
+    # missing field(s), rather than silently degrading to constant η.
+    if isinstance(exc, GeometryParamsIncomplete):
+        return {
+            "kind": "design",
+            "title": f"{exc.component_kind} geometry is incomplete",
+            "plain_english": (
+                f"Live mean-line mode found a geometry_params bag on the "
+                f"{exc.component_kind} but it is missing required field(s): "
+                + ", ".join(exc.missing)
+                + ". A partial geometry cannot produce a trustworthy η, so "
+                "the solver refuses rather than guessing the missing "
+                "dimensions (refusal-over-guess, SPEC_SHEET §13)."
+            ),
+            "suggestions": exc.suggestions,
+            "details": msg,
+        }
+
+    # U9: an unknown unit inside an attached geometry bag raises the same
+    # structured 422 HTTPException the synchronous validation path uses
+    # (G2 / Item 3a). Raised mid-worker it is still a user-input problem,
+    # so it classifies design-class — never a bug traceback.
+    if isinstance(exc, HTTPException) and isinstance(exc.detail, dict):
+        detail = exc.detail
+        if detail.get("error_code") == "UNKNOWN_UNIT":
+            return {
+                "kind": "design",
+                "title": "Unknown unit in the attached geometry",
+                "plain_english": (
+                    "A field in the attached geometry_params carries a unit "
+                    "string the unit registry doesn't recognise, so the "
+                    "value cannot be converted to SI. The solver refuses "
+                    "rather than guessing the dimension."
+                ),
+                "suggestions": [
+                    f"Fix the unit on field '{detail.get('field', '?')}' — "
+                    "use an SI unit string (m, mm, rad, …) or a plain float "
+                    "already in SI base units.",
+                    "Re-send the geometry from a candidate detail page in Flow Path — 'Send to cycle' writes plain SI floats.",
+                ],
+                "details": str(detail.get("message", msg)),
+            }
+
     # U7: burner exit temperature above the uncooled material limit. In
     # fuel-mass-flow mode the TIT is back-derived from ṁ_fuel, so the fix
     # is to reduce the fuel flow; in outlet-temperature mode, lower the
@@ -1043,6 +1162,9 @@ def _cycle_worker(project_id: str):
             # W-03 / AC3: stable field shape on failure — empty dicts.
             "component_efficiencies": {},
             "efficiency_modes": {},
+            # U9: requested-vs-actual fields keep the same stable shape.
+            "requested_efficiency_modes": {},
+            "efficiency_fallbacks": {},
             "failure": failure,
         }
 
@@ -1059,10 +1181,17 @@ def _cycle_worker(project_id: str):
         if isinstance(exc, MissingRequiredComponents):
             return MissingRequiredComponents.CAUSE_CODE
         # RegimeOutOfValidity carries its own stable code (e.g.
-        # OPEN_CYCLE_SUB_ATMOSPHERIC, LIVE_MEANLINE_REGIME_REFUSED).
+        # OPEN_CYCLE_SUB_ATMOSPHERIC, LIVE_MEANLINE_REGIME_REFUSED), as do
+        # the typed builder exceptions (GEOMETRY_PARAMS_INCOMPLETE, …).
         code = getattr(exc, "code", None)
         if code:
             return str(code)
+        # In-worker structured HTTPException (e.g. the geometry builders'
+        # UNKNOWN_UNIT 422) — reuse its error_code as the cause code.
+        if isinstance(exc, HTTPException) and isinstance(exc.detail, dict):
+            error_code = exc.detail.get("error_code")
+            if error_code:
+                return str(error_code)
         if failure.get("kind") == "bug":
             return "UNEXPECTED_SOLVER_ERROR"
         return "DESIGN_REFUSED"
@@ -1257,6 +1386,22 @@ def _cycle_worker(project_id: str):
         except AttributeError:
             pass  # non-recuperated specs expose the same fields; defensive
 
+        # U9 / ADAPT-045: requested-vs-actual. `efficiency_modes` above is
+        # read back from the built spec, so it records only the mode the
+        # solve ACTUALLY used — the spec builder downgrades live_meanline
+        # to constant when no geometry is attached. Record what the user's
+        # params REQUESTED, plus an explicit per-rotor fallback flag, so
+        # the UI can render "requested live mean-line, got isentropic"
+        # instead of an unlabelled isentropic number.
+        requested_modes = _requested_efficiency_modes(project)
+        efficiency_fallbacks = {
+            name: bool(
+                requested_modes.get(name) == "live_meanline"
+                and actual != "live_meanline"
+            )
+            for name, actual in efficiency_modes.items()
+        }
+
         out = {
             "converged": bool(result.converged),
             "outer_iterations": int(result.outer_iterations),
@@ -1283,6 +1428,9 @@ def _cycle_worker(project_id: str):
                 k: float(v) for k, v in result.component_efficiencies.items()
             },
             "efficiency_modes": efficiency_modes,
+            # U9: what the user's params asked for + explicit fallback flags.
+            "requested_efficiency_modes": requested_modes,
+            "efficiency_fallbacks": efficiency_fallbacks,
         }
         # Converged run: the non-converged branch returned above, so this is
         # always "done". Save so the badge survives a restart.

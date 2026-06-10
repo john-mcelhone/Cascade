@@ -340,12 +340,32 @@ async function fetchJson<T>(
     } catch {
       detail = await res.text();
     }
-    const msg =
-      typeof detail === "object" && detail !== null && "detail" in detail
-        ? String((detail as { detail: unknown }).detail)
-        : typeof detail === "string"
-          ? detail
-          : `HTTP ${res.status}`;
+    // FastAPI's error body is {detail: ...} where detail is either a
+    // plain string or a structured dict ({error_code, message, ...} —
+    // e.g. the 422 air-standard + live-meanline conflict). Stringifying
+    // the dict directly rendered "[object Object]" in toasts; prefer the
+    // structured `message` field.
+    let msg = `HTTP ${res.status}`;
+    if (typeof detail === "string" && detail) {
+      msg = detail;
+    } else if (typeof detail === "object" && detail !== null && "detail" in detail) {
+      const inner = (detail as { detail: unknown }).detail;
+      if (typeof inner === "string") {
+        msg = inner;
+      } else if (
+        inner !== null &&
+        typeof inner === "object" &&
+        typeof (inner as { message?: unknown }).message === "string"
+      ) {
+        msg = (inner as { message: string }).message;
+      } else if (inner != null) {
+        try {
+          msg = JSON.stringify(inner);
+        } catch {
+          /* keep the HTTP fallback */
+        }
+      }
+    }
     throw new ApiError(res.status, msg, detail);
   }
   if (res.status === 204) return undefined as unknown as T;
@@ -912,6 +932,41 @@ export function adaptCycleResult(raw: Record<string, unknown>): CycleResult {
           typeof c.outletMassFlow === "number" ? c.outletMassFlow : 0,
       }))
     : [];
+  // U9: per-rotor efficiency attribution. The backend ships four dicts
+  // keyed by component name — converged η, the mode actually used, the
+  // mode the user requested (pre-fallback), and an explicit fallback
+  // flag. The result panel's "Efficiency sources" block renders from
+  // these; dropping them (the pre-U9 behaviour) left a live-meanline
+  // fallback invisible. Mirrored by
+  // src/__tests__/efficiency-sources.test.mjs.
+  const recordOf = <V,>(
+    k: string,
+    isV: (v: unknown) => v is V,
+  ): Record<string, V> | undefined => {
+    const v = raw[k];
+    if (!v || typeof v !== "object" || Array.isArray(v)) return undefined;
+    const out: Record<string, V> = {};
+    for (const [name, val] of Object.entries(v as Record<string, unknown>)) {
+      if (isV(val)) out[name] = val;
+    }
+    return out;
+  };
+  const componentEfficiencies = recordOf(
+    "component_efficiencies",
+    (v): v is number => typeof v === "number" && Number.isFinite(v),
+  );
+  const efficiencyModes = recordOf(
+    "efficiency_modes",
+    (v): v is string => typeof v === "string",
+  );
+  const requestedEfficiencyModes = recordOf(
+    "requested_efficiency_modes",
+    (v): v is string => typeof v === "string",
+  );
+  const efficiencyFallbacks = recordOf(
+    "efficiency_fallbacks",
+    (v): v is boolean => typeof v === "boolean",
+  );
   // Structured-failure envelope (backend `_classify_failure`). Present
   // when the solver couldn't produce a valid answer; the UI surfaces it
   // as a friendly explanation (design issues) or a copy-the-log panel
@@ -946,6 +1001,10 @@ export function adaptCycleResult(raw: Record<string, unknown>): CycleResult {
     electricalOutput: quantity("electrical_output", 1e-3),
     components,
     states,
+    componentEfficiencies,
+    efficiencyModes,
+    requestedEfficiencyModes,
+    efficiencyFallbacks,
     failure,
   };
 }

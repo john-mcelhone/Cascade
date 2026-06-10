@@ -11,9 +11,11 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z, type ZodObject, type ZodRawShape } from "zod";
 import {
   AlertTriangle,
+  Box,
   ChevronDown,
   ChevronRight,
   HelpCircle,
+  Info,
   MoreHorizontal,
   Save,
   Trash2,
@@ -43,6 +45,7 @@ import {
 } from "@/components/ui/tooltip";
 import { QuantityInput, ComputedValue } from "./quantity-input";
 import { MaterialPicker } from "@/components/materials/material-picker";
+import { getProjectSettings, getRawComponents } from "@/lib/api/flowpath";
 import type {
   CycleNode,
   CycleNodeKind,
@@ -1292,6 +1295,60 @@ function NodeForm({
     : undefined;
   // -------------------------------------------------------------------------
 
+  // ---- U9: rotor geometry presence (live mean-line messaging) -------------
+  // Read via the RAW components endpoint: the cycle page's param
+  // translation (KIND_TRANSLATIONS) deliberately does not surface
+  // geometry_params, and this panel's form schema / PATCH path must not
+  // grow it either — the candidate-detail handoff endpoint is the only
+  // writer (U8). The conditional note / chip below the efficiency-mode
+  // radio replaces the old warn-on-pick toast, which guessed.
+  const isRotor = node.kind === "compressor" || node.kind === "turbine";
+  const [geometryStatus, setGeometryStatus] =
+    React.useState<RotorGeometryStatus>({ state: "unknown" });
+  const projectId = project?.id;
+  React.useEffect(() => {
+    if (!isRotor || !projectId) return;
+    const ctrl = new AbortController();
+    void (async () => {
+      try {
+        const [components, settings] = await Promise.all([
+          getRawComponents(projectId, ctrl.signal),
+          getProjectSettings(projectId, ctrl.signal),
+        ]);
+        const rawComp = components.find((c) => c.id === node.id);
+        const gp = rawComp?.params?.geometry_params;
+        if (
+          gp &&
+          typeof gp === "object" &&
+          !Array.isArray(gp) &&
+          Object.keys(gp).length > 0
+        ) {
+          const active = settings.active_candidate_id;
+          setGeometryStatus({
+            state: "attached",
+            keyCount: Object.keys(gp).length,
+            sourceCandidateId:
+              typeof active === "string" ? active : undefined,
+          });
+        } else {
+          setGeometryStatus({ state: "absent" });
+        }
+      } catch {
+        // Backend unreachable — render neither note nor chip rather than
+        // guessing at geometry presence.
+        if (!ctrl.signal.aborted) setGeometryStatus({ state: "unknown" });
+      }
+    })();
+    return () => ctrl.abort();
+  }, [isRotor, projectId, node.id]);
+
+  // Watch the in-form mode so the no-geometry note reacts as the user
+  // flips the radio, before Save.
+  const rotorEfficiencyMode = isRotor
+    ? (form.watch("efficiency_mode" as Path<Values>) as unknown as string)
+    : undefined;
+  // -------------------------------------------------------------------------
+
   // Mirror local `dirty` into the global Cycle UI store so the Run button
   // (a sibling subtree) can warn the user that the solver will run against
   // un-flushed backend values. Also drives a `beforeunload` listener so an
@@ -1374,6 +1431,10 @@ function NodeForm({
           }
         }
       }
+      // U9: live_meanline no longer warns on pick — the conditional
+      // geometry note / chip below the mode radio carries the messaging
+      // (it knows whether geometry is actually attached; the old B12-era
+      // toast guessed). Polytropic keeps its preview-only warning.
       if (
         (node.kind === "compressor" || node.kind === "turbine") &&
         name === "efficiency_mode"
@@ -1385,11 +1446,6 @@ function NodeForm({
           toast.warning("Polytropic mode is preview-only", {
             description:
               "Cycle solver still uses isentropic η on this code path. Run the Analysis page mean-line solver for polytropic.",
-          });
-        } else if (mode === "live_meanline") {
-          toast.warning("Live mean-line mode requires geometry", {
-            description:
-              "Set a meanline geometry on the Analysis page first. The cycle solver only consults the live η when geometry is attached.",
           });
         }
       }
@@ -1534,18 +1590,27 @@ function NodeForm({
       {essentialFields.length > 0 && (
         <FormSection title="Essentials">
           {essentialFields.map((f) => (
-            <FieldRenderer
-              key={f.key}
-              field={f}
-              form={form}
-              disabled={f.key === inactiveFieldKey}
-              disabledReason={
-                f.key === inactiveFieldKey ? inactiveFieldReason : undefined
-              }
-              optionDisabled={
-                f.key === "spec_mode" ? specModeOptionDisabled : undefined
-              }
-            />
+            <React.Fragment key={f.key}>
+              <FieldRenderer
+                field={f}
+                form={form}
+                disabled={f.key === inactiveFieldKey}
+                disabledReason={
+                  f.key === inactiveFieldKey ? inactiveFieldReason : undefined
+                }
+                optionDisabled={
+                  f.key === "spec_mode" ? specModeOptionDisabled : undefined
+                }
+              />
+              {/* U9: conditional geometry messaging below the mode radio. */}
+              {f.key === "efficiency_mode" && isRotor && (
+                <RotorGeometryNote
+                  kind={node.kind as "compressor" | "turbine"}
+                  mode={rotorEfficiencyMode}
+                  status={geometryStatus}
+                />
+              )}
+            </React.Fragment>
           ))}
         </FormSection>
       )}
@@ -1648,6 +1713,73 @@ function NodeForm({
       </div>
     </form>
   );
+}
+
+/* ---------------------------------------------------------------------------
+ * U9 — rotor geometry messaging below the efficiency-mode radio.
+ * ------------------------------------------------------------------------- */
+
+type RotorGeometryStatus =
+  | { state: "unknown" }
+  | { state: "absent" }
+  | { state: "attached"; keyCount: number; sourceCandidateId?: string };
+
+/**
+ * Conditional messaging for the live mean-line mode (replaces the B12-era
+ * warn-on-pick toast):
+ *   - geometry attached → a read-only chip (key count + source candidate
+ *     when one is pinned), shown regardless of the selected mode;
+ *   - no geometry AND live mean-line selected → an info note pointing at
+ *     the candidate-detail handoff;
+ *   - presence unknown (backend unreachable) → nothing, rather than a
+ *     guess.
+ */
+function RotorGeometryNote({
+  kind,
+  mode,
+  status,
+}: {
+  kind: "compressor" | "turbine";
+  mode?: string;
+  status: RotorGeometryStatus;
+}) {
+  if (status.state === "attached") {
+    return (
+      <div className="flex items-center gap-1.5 self-start rounded-sm border border-border-subtle bg-surface-subtle/60 px-2 py-1 text-[11px] text-text-muted">
+        <Box className="h-3 w-3 shrink-0" aria-hidden="true" />
+        <span>
+          Geometry attached · {status.keyCount}{" "}
+          {status.keyCount === 1 ? "key" : "keys"}
+          {status.sourceCandidateId && (
+            <>
+              {" · candidate "}
+              <span className="font-mono">
+                {status.sourceCandidateId.slice(0, 8)}
+              </span>
+            </>
+          )}
+        </span>
+      </div>
+    );
+  }
+  if (status.state === "absent" && mode === "live_meanline") {
+    return (
+      <div className="flex items-start gap-2 rounded-sm border border-border-subtle bg-surface-subtle/40 p-2 text-[11px] leading-snug text-text">
+        <Info
+          className="mt-0.5 h-3.5 w-3.5 shrink-0 text-text-muted"
+          aria-hidden="true"
+        />
+        <span>
+          {kind === "compressor"
+            ? "Live mean-line needs compressor geometry — open a candidate in Flow Path and use “Send to cycle”."
+            : "Live mean-line needs turbine geometry attached to this component — no geometry is attached."}{" "}
+          Until then the solve falls back to constant isentropic η, and the
+          result panel flags the fallback.
+        </span>
+      </div>
+    );
+  }
+  return null;
 }
 
 /* ---------------------------------------------------------------------------
