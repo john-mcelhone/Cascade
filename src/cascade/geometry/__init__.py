@@ -96,7 +96,7 @@ def impeller_mesh(
     *,
     with_splitter: bool = True,
     with_back_face: bool = True,
-    with_shroud: bool = True,
+    with_shroud: bool = False,
     with_tip_clearance_overlay: bool = False,
 ) -> trimesh.Trimesh:
     """Generate a photoreal-quality mesh of a centrifugal impeller or radial
@@ -118,10 +118,18 @@ def impeller_mesh(
             `TypeError`.
         lod: target level of detail. Higher LOD → more triangles, more
             visual fidelity, more wire bytes.
-        with_splitter: include splitter blades at half pitch starting at
-            50% chord. Only emitted when blade_count ≥ 6.
+        with_splitter: split the ``blade_count`` budget into half full
+            blades and half splitters at half pitch (splitter LE at ~35%
+            chord). Only takes effect when ``blade_count`` is even and
+            ≥ 8; otherwise all blades render full-length. The TOTAL blade
+            count always equals ``blade_count`` — the number the meanline
+            correlations were scored with.
         with_back_face: cap the back face of the impeller / rotor disc.
-        with_shroud: render the shroud surface of revolution.
+        with_shroud: additionally render the *casing* contour as an open
+            surface of revolution over the wheel. Default off: the part
+            itself is an open (unshrouded) impeller, and the cup both
+            hides the blades in the viewer and leaves non-manifold
+            surfaces in STL/STEP exports destined for manufacturing.
         with_tip_clearance_overlay: render a thin clearance band.
     """
     if isinstance(geometry, CentrifugalCompressorGeometry):

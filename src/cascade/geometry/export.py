@@ -172,17 +172,18 @@ def _meridional_curves_from_geometry(
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Sample the analytic hub + shroud meridional curves for an impeller.
 
-    Returns ``(z_hub, r_hub, z_shroud, r_shroud)``. The same B-spline
-    sampling used by the mesh generators (`cascade.geometry.impeller` and
-    `cascade.geometry.radial_turbine`) is used here so the exported curves
-    are bit-for-bit consistent with the 3D mesh.
+    Returns ``(z_hub, r_hub, z_shroud, r_shroud)``. The curves come from
+    the mesh generators themselves (`cascade.geometry.impeller` and
+    `cascade.geometry.radial_turbine`) so the exported curves are
+    bit-for-bit consistent with the 3D mesh.
     """
     # Local imports to avoid a module-level cycle with the mesh modules
     # (which themselves import `apply_titanium_material` from this file).
-    from cascade.geometry._curves import (
-        cubic_bspline_curve,
-        default_hub_control_points,
-        default_shroud_control_points,
+    from cascade.geometry.impeller import (
+        _build_meridional_curves as _cc_meridional_curves,
+    )
+    from cascade.geometry.radial_turbine import (
+        _build_meridional_curves as _rit_meridional_curves,
     )
     from cascade.meanline.centrifugal_compressor import (
         CentrifugalCompressorGeometry,
@@ -190,45 +191,15 @@ def _meridional_curves_from_geometry(
     from cascade.meanline.radial_turbine import RadialTurbineGeometry
 
     if isinstance(geometry, CentrifugalCompressorGeometry):
-        z_axial = 0.6 * geometry.impeller_outlet_radius
-        r_in_hub = geometry.inducer_hub_radius
-        r_in_tip = geometry.inducer_tip_radius
-        r_out = geometry.impeller_outlet_radius
-        tip_clr = geometry.tip_clearance
-        flow = "centrifugal"
-        r_out_shroud = r_out
-        blade_height_radial = geometry.blade_height_outlet
-    elif isinstance(geometry, RadialTurbineGeometry):
-        z_axial = 0.5 * geometry.rotor_inlet_radius
-        r_in_hub = geometry.rotor_inlet_radius
-        r_in_tip = geometry.rotor_inlet_radius
-        r_out = geometry.rotor_outlet_radius_hub
-        r_out_shroud = geometry.rotor_outlet_radius_tip
-        tip_clr = geometry.tip_clearance
-        flow = "radial"
-        blade_height_radial = geometry.blade_height_inlet
-    else:
-        msg = (
-            f"_meridional_curves_from_geometry: expected a "
-            f"CentrifugalCompressorGeometry or RadialTurbineGeometry, "
-            f"got {type(geometry).__name__}"
-        )
-        raise TypeError(msg)
-
-    hub_ctrl = default_hub_control_points(
-        r_inlet=r_in_hub, r_outlet=r_out, z_axial=z_axial, flow=flow,
+        return _cc_meridional_curves(geometry, n_samples)
+    if isinstance(geometry, RadialTurbineGeometry):
+        return _rit_meridional_curves(geometry, n_samples)
+    msg = (
+        f"_meridional_curves_from_geometry: expected a "
+        f"CentrifugalCompressorGeometry or RadialTurbineGeometry, "
+        f"got {type(geometry).__name__}"
     )
-    shroud_ctrl = default_shroud_control_points(
-        r_inlet=r_in_tip,
-        r_outlet=r_out_shroud,
-        z_axial=z_axial,
-        tip_clearance=tip_clr,
-        blade_height_radial=blade_height_radial,
-        flow=flow,
-    )
-    z_hub, r_hub = cubic_bspline_curve(hub_ctrl, n_samples)
-    z_shroud, r_shroud = cubic_bspline_curve(shroud_ctrl, n_samples)
-    return z_hub, r_hub, z_shroud, r_shroud
+    raise TypeError(msg)
 
 
 def export_turbogrid_curve(
@@ -346,6 +317,12 @@ def export_turbogrid_ndf(
         camber_theta_from_beta,
         meridional_arc_length,
     )
+    from cascade.geometry.impeller import (
+        blade_metal_angles as _cc_blade_metal_angles,
+    )
+    from cascade.geometry.radial_turbine import (
+        blade_metal_angles as _rit_blade_metal_angles,
+    )
     from cascade.meanline.centrifugal_compressor import (
         CentrifugalCompressorGeometry,
     )
@@ -374,13 +351,14 @@ def export_turbogrid_ndf(
     z_hub_b, r_hub_b = _resample(z_hub, r_hub, n_blade)
     z_sh_b, r_sh_b = _resample(z_shroud, r_shroud, n_blade)
 
+    # Per-surface metal angles — the SAME spanwise twist the mesh
+    # generators use, so the exported camber matches the 3D blade.
     if isinstance(geometry, CentrifugalCompressorGeometry):
-        beta_le = math.radians(60.0)
-        beta_te = geometry.beta_2_metal_rad
+        beta_le_hub, beta_le_sh, beta_te = _cc_blade_metal_angles(geometry)
+        beta_te_hub = beta_te_sh = beta_te
     elif isinstance(geometry, RadialTurbineGeometry):
-        # RIT: use inlet metal angle at LE and exducer angle at TE.
-        beta_le = geometry.inlet_metal_angle_rad
-        beta_te = geometry.exducer_angle_rad
+        beta_le_hub, beta_te_hub, beta_te_sh = _rit_blade_metal_angles(geometry)
+        beta_le_sh = beta_le_hub
     else:
         msg = (
             f"export_turbogrid_ndf: expected CentrifugalCompressorGeometry or "
@@ -388,13 +366,14 @@ def export_turbogrid_ndf(
         )
         raise TypeError(msg)
 
-    beta = blade_angle_distribution(n_blade, beta_le, beta_te)
+    beta_hub = blade_angle_distribution(n_blade, beta_le_hub, beta_te_hub)
+    beta_sh = blade_angle_distribution(n_blade, beta_le_sh, beta_te_sh)
 
     s_hub = meridional_arc_length(z_hub_b, r_hub_b)
     s_sh = meridional_arc_length(z_sh_b, r_sh_b)
 
-    theta_hub = camber_theta_from_beta(s_hub, r_hub_b, beta)
-    theta_sh = camber_theta_from_beta(s_sh, r_sh_b, beta)
+    theta_hub = camber_theta_from_beta(s_hub, r_hub_b, beta_hub)
+    theta_sh = camber_theta_from_beta(s_sh, r_sh_b, beta_sh)
 
     # ---- write NDF file -------------------------------------------------------
     out = Path(path)
@@ -947,10 +926,17 @@ def _build_fluid_volume_occ(
         blade_angle_distribution,
         blade_thickness_distribution,
         camber_theta_from_beta,
-        cubic_bspline_curve,
-        default_hub_control_points,
-        default_shroud_control_points,
         meridional_arc_length,
+    )
+    from cascade.geometry.impeller import (
+        blade_metal_angles as _cc_blade_metal_angles,
+    )
+    from cascade.geometry.radial_turbine import (
+        blade_metal_angles as _rit_blade_metal_angles,
+    )
+    from cascade.manufacturability.limits import (
+        cast_blade_peak_thickness_m,
+        machinable_blade_peak_thickness_m,
     )
     from cascade.meanline.centrifugal_compressor import CentrifugalCompressorGeometry
     from cascade.meanline.radial_turbine import RadialTurbineGeometry
@@ -973,29 +959,19 @@ def _build_fluid_volume_occ(
     from OCC.Core.gp import gp_Ax1, gp_Dir, gp_Pnt, gp_Vec
 
     if isinstance(geometry, CentrifugalCompressorGeometry):
-        z_axial = 0.6 * geometry.impeller_outlet_radius
-        r_in_hub = geometry.inducer_hub_radius
-        r_in_tip = geometry.inducer_tip_radius
-        r_out = geometry.impeller_outlet_radius
-        r_out_shroud = geometry.impeller_outlet_radius
-        tip_clr = geometry.tip_clearance
         blade_count = geometry.blade_count
-        beta_le = math.radians(60.0)
-        beta_te = geometry.beta_2_metal_rad
+        beta_le_hub, beta_le_sh, beta_te = _cc_blade_metal_angles(geometry)
+        beta_te_hub = beta_te_sh = beta_te
+        t_max_m = machinable_blade_peak_thickness_m(
+            geometry.impeller_outlet_radius
+        )
         flow = "centrifugal"
-        blade_height_radial = geometry.blade_height_outlet
     elif isinstance(geometry, RadialTurbineGeometry):
-        z_axial = 0.5 * geometry.rotor_inlet_radius
-        r_in_hub = geometry.rotor_inlet_radius
-        r_in_tip = geometry.rotor_inlet_radius
-        r_out = geometry.rotor_outlet_radius_hub
-        r_out_shroud = geometry.rotor_outlet_radius_tip
-        tip_clr = geometry.tip_clearance
         blade_count = geometry.blade_count
-        beta_le = geometry.inlet_metal_angle_rad
-        beta_te = geometry.exducer_angle_rad
+        beta_le_hub, beta_te_hub, beta_te_sh = _rit_blade_metal_angles(geometry)
+        beta_le_sh = beta_le_hub
+        t_max_m = cast_blade_peak_thickness_m(geometry.rotor_inlet_radius)
         flow = "radial"
-        blade_height_radial = geometry.blade_height_inlet
     else:
         raise TypeError(
             f"_build_fluid_volume_occ: unsupported geometry type "
@@ -1003,16 +979,11 @@ def _build_fluid_volume_occ(
         )
 
     # --- Sample hub and shroud meridional curves --------------------------
-    hub_ctrl = default_hub_control_points(
-        r_inlet=r_in_hub, r_outlet=r_out, z_axial=z_axial, flow=flow,
+    # Same tangency-correct contours as the mesh generators (single source
+    # of truth — see _meridional_curves_from_geometry).
+    z_hub_pts, r_hub_pts, z_sh_pts, r_sh_pts = (
+        _meridional_curves_from_geometry(geometry, n_samples=n_meridional)
     )
-    shroud_ctrl = default_shroud_control_points(
-        r_inlet=r_in_tip, r_outlet=r_out_shroud, z_axial=z_axial,
-        tip_clearance=tip_clr, blade_height_radial=blade_height_radial,
-        flow=flow,
-    )
-    z_hub_pts, r_hub_pts = cubic_bspline_curve(hub_ctrl, n_meridional)
-    z_sh_pts, r_sh_pts = cubic_bspline_curve(shroud_ctrl, n_meridional)
 
     # Pitch angle per blade passage.
     pitch_angle = 2.0 * math.pi / blade_count
@@ -1183,16 +1154,16 @@ def _build_fluid_volume_occ(
     z_sh_b = _interp1d_inner(t_orig, z_sh_pts)(t_blade)
     r_sh_b = _interp1d_inner(t_orig, r_sh_pts)(t_blade)
 
+    # Per-streamline camber with the same spanwise twist as the mesh
+    # generators (hub and shroud each integrate their own β distribution
+    # along their own arc length).
     s_hub_b = meridional_arc_length(z_hub_b, r_hub_b)
-    beta = blade_angle_distribution(n_blade_m, beta_le, beta_te)
-    theta_camber_hub = camber_theta_from_beta(s_hub_b, r_hub_b, beta)
-    theta_camber_sh = theta_camber_hub.copy()  # non-leaned approximation
+    s_sh_b = meridional_arc_length(z_sh_b, r_sh_b)
+    beta_hub = blade_angle_distribution(n_blade_m, beta_le_hub, beta_te_hub)
+    beta_sh = blade_angle_distribution(n_blade_m, beta_le_sh, beta_te_sh)
+    theta_camber_hub = camber_theta_from_beta(s_hub_b, r_hub_b, beta_hub)
+    theta_camber_sh = camber_theta_from_beta(s_sh_b, r_sh_b, beta_sh)
 
-    t_max_m = 0.015 * (
-        geometry.impeller_outlet_radius
-        if isinstance(geometry, CentrifugalCompressorGeometry)
-        else geometry.rotor_inlet_radius
-    )
     t_dist = blade_thickness_distribution(n_blade_m, t_max_m)
     r_mid = 0.5 * (r_hub_b + r_sh_b)
     dtheta = 0.5 * t_dist / np.maximum(r_mid, 1e-9)

@@ -3,14 +3,18 @@
 Produces a watertight `trimesh.Trimesh` from a
 `CentrifugalCompressorGeometry`. The algorithm follows this recipe:
 
-1. Sample hub and shroud B-spline curves in the meridional plane.
-2. Compute a blade meanline by integrating ``dθ/dm = tan(β)/r``.
-3. Loft a single blade's pressure / suction surfaces from the meanline ±
-   a bell-curve thickness distribution.
+1. Sample tangency-correct quarter-ellipse hub and shroud contours in
+   the meridional plane (axial at the inducer, radial at the exit).
+2. Build the blade camber surface by integrating ``dθ/dm = tan(β)/r``
+   per spanwise streamline, with the LE metal angle twisted from hub to
+   shroud (``tan β₁ ∝ r``, the velocity-triangle relation).
+3. Offset the camber ± a bell-curve thickness to get pressure / suction
+   surfaces.
 4. Cap leading and trailing edges; cap pressure-to-suction at hub & tip
    bands.
-5. Replicate the single blade around the axis ``Z`` times (full blades)
-   and ``Z`` more times at half pitch for splitters (optional).
+5. Replicate the blade around the axis. ``blade_count`` is the TOTAL
+   blade count: ``Z`` full blades, or ``Z/2`` full + ``Z/2`` splitters
+   at half pitch when splitters are requested.
 6. Generate hub disc surface of revolution + back-face disc + optional
    shroud cup.
 7. Concatenate all components; attach PBR material; compute normals.
@@ -22,21 +26,16 @@ within the 60 fps WebGL budget.
 from __future__ import annotations
 
 import math
-from typing import List, Tuple, Union
+from typing import List, Tuple
 
 import numpy as np
 import trimesh
 
 from cascade.geometry._curves import (
-    blade_angle_distribution,
     blade_thickness_distribution,
-    camber_theta_from_beta,
-    cubic_bspline_curve,
-    default_hub_control_points,
-    default_shroud_control_points,
-    disc_cap,
-    loft_blade_surface,
-    meridional_arc_length,
+    grid_to_cartesian,
+    meridional_contour,
+    passage_camber_grid,
     surface_of_revolution,
     triangulate_quad_grid,
 )
@@ -111,6 +110,17 @@ def _build_meridional_curves(
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Sample hub and shroud meridional curves.
 
+    Both contours are quarter-ellipses with exact end tangency: axial at
+    the inducer inlet, radial at the impeller exit (Aungier 2000 §5.3 —
+    the canonical centrifugal flow-path shape, also the contour family
+    validated in RadialDesigner against built hardware).
+
+    At the radial exit the passage height and the tip-clearance offset
+    are both *axial*: the shroud ends at full radius ``r_outlet`` with
+    its z offset from the hub exit plane by ``blade_height_outlet +
+    tip_clearance``. Blades loft all the way to the shroud curve, so no
+    discrete tip gap is modeled — see KG-G-05.
+
     Returns ``(z_hub, r_hub, z_shroud, r_shroud)`` arrays of length
     ``n_meridional``.
     """
@@ -118,25 +128,62 @@ def _build_meridional_curves(
     r_in_hub = geometry.inducer_hub_radius
     r_in_tip = geometry.inducer_tip_radius
     r_out = geometry.impeller_outlet_radius
-    tip_clr = geometry.tip_clearance
 
-    hub_ctrl = default_hub_control_points(
-        r_inlet=r_in_hub,
-        r_outlet=r_out,
-        z_axial=z_axial,
-        flow="centrifugal",
+    z_shroud_exit = z_axial - (
+        geometry.blade_height_outlet + geometry.tip_clearance
     )
-    shroud_ctrl = default_shroud_control_points(
-        r_inlet=r_in_tip,
-        r_outlet=r_out,
-        z_axial=z_axial,
-        tip_clearance=tip_clr,
-        blade_height_radial=geometry.blade_height_outlet,
-        flow="centrifugal",
+    # 5% floor, not just > 0: a shroud compressed into a sliver of the
+    # axial span produces a near-vertical contour with a degenerate
+    # passage — fail loudly instead of lofting garbage blades.
+    if z_shroud_exit <= 0.05 * z_axial:
+        raise ValueError(
+            f"blade_height_outlet + tip_clearance "
+            f"({geometry.blade_height_outlet + geometry.tip_clearance:.4g}) "
+            f"leaves under 5% of the meridional axial length "
+            f"({z_axial:.4g}); degenerate shroud curve"
+        )
+
+    z_hub, r_hub = meridional_contour(
+        0.0, r_in_hub, z_axial, r_out, n_meridional, start_tangent="axial",
     )
-    z_hub, r_hub = cubic_bspline_curve(hub_ctrl, n_meridional)
-    z_shroud, r_shroud = cubic_bspline_curve(shroud_ctrl, n_meridional)
+    z_shroud, r_shroud = meridional_contour(
+        0.0, r_in_tip, z_shroud_exit, r_out, n_meridional,
+        start_tangent="axial",
+    )
     return z_hub, r_hub, z_shroud, r_shroud
+
+
+# Default inducer-tip blade metal angle (from axial) when the meanline
+# has not supplied one. ~60° at the shroud is the canonical optimum-
+# inlet result (minimum relative Mach inducer lands at 55–62°; Whitfield
+# & Baines 1990 §6.2, also RadialDesigner's inducer optimiser).
+_DEFAULT_INDUCER_TIP_METAL_RAD: float = math.radians(60.0)
+
+
+def blade_metal_angles(
+    geometry: CentrifugalCompressorGeometry,
+) -> Tuple[float, float, float]:
+    """LE hub / LE shroud / TE blade metal angles (from meridional), radians.
+
+    The LE tip angle comes from the meanline
+    (``inducer_tip_blade_metal_rad``) or the canonical 60° default. The
+    LE hub angle follows the velocity-triangle relation ``tan β₁ ∝ r``
+    (uniform axial inflow, wheel speed ∝ r): the hub sees a much
+    shallower metal angle than the shroud. This spanwise twist is what
+    keeps the hub camber from over-wrapping into a corkscrew.
+
+    The TE angle is the exit metal angle ``β₂`` (backsweep, measured from
+    radial = from meridional at a radial exit), span-constant across the
+    narrow exit per standard practice.
+    """
+    beta_tip = geometry.inducer_tip_blade_metal_rad
+    if beta_tip is None:
+        beta_tip = _DEFAULT_INDUCER_TIP_METAL_RAD
+    radius_ratio = geometry.inducer_hub_radius / max(
+        geometry.inducer_tip_radius, 1e-12
+    )
+    beta_hub = math.atan(radius_ratio * math.tan(beta_tip))
+    return beta_hub, float(beta_tip), float(geometry.beta_2_metal_rad)
 
 
 def _build_single_blade(
@@ -162,46 +209,37 @@ def _build_single_blade(
     - trailing-edge cap (closes the TE)
 
     ``fractional_chord_start/end`` allow cutting the blade short, which
-    is what we do for splitters (start at ~50% chord, run to TE).
+    is what we do for splitters. A splitter is the SAME camber surface as
+    the main blade cut short at its LE (it occupies mid-passage all along
+    its length), so the camber is always built over the full chord and
+    sliced afterwards.
     """
     n_m_full = len(z_hub)
-    # Clip the curves to [start, end] fractional chord.
+
+    # Camber surface over the FULL chord: per-streamline wrap integration
+    # with the LE metal angle twisted hub → shroud (see blade_metal_angles).
+    beta_le_hub, beta_le_tip, beta_te = blade_metal_angles(geometry)
+    Z_grid, R_grid, theta_grid = passage_camber_grid(
+        z_hub, r_hub, z_shroud, r_shroud,
+        beta_le_hub_rad=beta_le_hub,
+        beta_le_shroud_rad=beta_le_tip,
+        beta_te_hub_rad=beta_te,
+        beta_te_shroud_rad=beta_te,
+        n_span=n_span,
+    )
+
+    # Clip the camber grid to [start, end] fractional chord.
     i0 = int(round(fractional_chord_start * (n_m_full - 1)))
     i1 = int(round(fractional_chord_end * (n_m_full - 1)))
-    z_hub_b = z_hub[i0:i1 + 1]
-    r_hub_b = r_hub[i0:i1 + 1]
-    z_sh_b = z_shroud[i0:i1 + 1]
-    r_sh_b = r_shroud[i0:i1 + 1]
-    n_m = len(z_hub_b)
+    Z_grid = Z_grid[i0:i1 + 1]
+    R_grid = R_grid[i0:i1 + 1]
+    theta_grid = theta_grid[i0:i1 + 1] + theta_offset
+    n_m = i1 - i0 + 1
     if n_m < 3:
         raise ValueError("blade segment too short — increase LOD or chord range")
 
-    # Meridional arc length along hub & shroud — use the hub for the camber
-    # integration (Whitfield 1990 §6.5 uses the hub streamline by convention).
-    s_hub = meridional_arc_length(z_hub_b, r_hub_b)
-
-    # Blade-angle distribution: at the inducer LE the blade is canted at
-    # the inducer tip incidence; at the TE it's at β₂_metal. For a
-    # backswept impeller these are typically 60° → 30° (from axial /
-    # meridional).
-    # We pick LE angle based on geometric defaults if the meanline
-    # solver hasn't computed it for us. The canonical β₁_tip is the
-    # angle whose tangent is (r₁_tip / chord_inducer) — call it 60°.
-    beta_le = math.radians(60.0)
-    # The TE blade angle in the SPEC convention is "from axial", but the
-    # `beta_2_metal_rad` already has that convention.
-    beta_te = geometry.beta_2_metal_rad
-    beta = blade_angle_distribution(n_m, beta_le, beta_te)
-
-    # Camber wrap angle θ(m) along hub.
-    theta_hub_camber = camber_theta_from_beta(s_hub, r_hub_b, beta)
-    # Shroud wrap is identical for a non-leaned blade; for real machines
-    # there's a small "lean" but it's a refinement we defer.
-    theta_shroud_camber = theta_hub_camber.copy()
-
     # Blade thickness in radians at each meridional station: convert
-    # thickness in metres to a Δθ at the local radius. Use the local
-    # circumferential pitch = 2π/Z as a reference.
+    # thickness in metres to a Δθ at the local radius.
     # 1.5% of D₂ (typical), floored at the 5-axis milling minimum so small
     # wheels never get blades thinner than a cutter can leave standing.
     # Shared with the manufacturability rules — see manufacturability.limits.
@@ -210,31 +248,14 @@ def _build_single_blade(
     t_max_m = machinable_blade_peak_thickness_m(geometry.impeller_outlet_radius)
     t_distribution = blade_thickness_distribution(n_m, t_max_m)
 
-    # Apply theta_offset (used for splitter placement at half pitch).
-    theta_hub_camber = theta_hub_camber + theta_offset
-    theta_shroud_camber = theta_shroud_camber + theta_offset
+    # Convert metric thickness → angular at the local radius of every
+    # grid point (not a single mid-span radius — small radii would
+    # otherwise get blades thinner than designed).
+    dtheta = 0.5 * t_distribution[:, None] / np.maximum(R_grid, 1e-9)
 
-    # Convert metric thickness → angular at each station.
-    r_mid = 0.5 * (r_hub_b + r_sh_b)
-    dtheta = 0.5 * t_distribution / np.maximum(r_mid, 1e-6)
-
-    # Pressure side and suction side wrap angles (hub & shroud).
-    theta_ps_hub = theta_hub_camber - dtheta
-    theta_ss_hub = theta_hub_camber + dtheta
-    theta_ps_sh = theta_shroud_camber - dtheta
-    theta_ss_sh = theta_shroud_camber + dtheta
-
-    # Loft pressure & suction surfaces.
-    pts_ps = loft_blade_surface(
-        z_hub_b, r_hub_b, z_sh_b, r_sh_b,
-        theta_ps_hub, theta_ps_sh,
-        n_span=n_span,
-    )
-    pts_ss = loft_blade_surface(
-        z_hub_b, r_hub_b, z_sh_b, r_sh_b,
-        theta_ss_hub, theta_ss_sh,
-        n_span=n_span,
-    )
+    # Pressure & suction surfaces: camber ± half thickness.
+    pts_ps = grid_to_cartesian(R_grid, theta_grid - dtheta, Z_grid)
+    pts_ss = grid_to_cartesian(R_grid, theta_grid + dtheta, Z_grid)
 
     # Triangulate the two main surfaces. Use opposite winding so outward
     # normals agree on a closed shell (pressure side faces -θ, suction
@@ -467,15 +488,24 @@ def centrifugal_impeller_mesh(
         geometry, n_meridional,
     )
 
-    # --- One full blade ----------------------------------------------------
+    # --- Blade replication ---------------------------------------------
+    # ``blade_count`` is the TOTAL blade count (it is what the meanline
+    # slip/loading correlations were scored with — "includes splitters in
+    # effective count" per the geometry dataclass). With splitters the
+    # budget splits into Z/2 full blades + Z/2 splitters at half pitch —
+    # the classic turbocharger configuration. Rendering Z full + Z
+    # splitters (the pre-fix behaviour) doubled the metal at the exit and
+    # left passages a cutter cannot reach.
+    Z = geometry.blade_count
+    use_splitters = with_splitter and Z >= 8 and Z % 2 == 0
+    n_main = Z // 2 if use_splitters else Z
+
     main_blade_template = _build_single_blade(
         geometry, z_hub, r_hub, z_shroud, r_shroud, n_span,
     )
-    # Replicate around the axis.
-    Z = geometry.blade_count
     blades: List[trimesh.Trimesh] = []
-    for k in range(Z):
-        rotation_angle = 2.0 * math.pi * k / Z
+    for k in range(n_main):
+        rotation_angle = 2.0 * math.pi * k / n_main
         T = trimesh.transformations.rotation_matrix(
             angle=rotation_angle, direction=[0.0, 0.0, 1.0],
         )
@@ -484,16 +514,17 @@ def centrifugal_impeller_mesh(
         blades.append(b)
 
     # --- Splitter blades (optional) ----------------------------------------
-    if with_splitter and Z >= 6:
-        # Splitter starts at ~50% chord, ends at TE. Half-pitch offset.
+    if use_splitters:
+        # Splitter LE at ~35% meridional chord (typical turbocharger
+        # practice: 30–40%), running to the TE at half pitch.
         splitter_template = _build_single_blade(
             geometry, z_hub, r_hub, z_shroud, r_shroud, n_span,
-            theta_offset=math.pi / Z,  # half pitch
-            fractional_chord_start=0.5,
+            theta_offset=math.pi / n_main,  # half pitch
+            fractional_chord_start=0.35,
             fractional_chord_end=1.0,
         )
-        for k in range(Z):
-            rotation_angle = 2.0 * math.pi * k / Z
+        for k in range(n_main):
+            rotation_angle = 2.0 * math.pi * k / n_main
             T = trimesh.transformations.rotation_matrix(
                 angle=rotation_angle, direction=[0.0, 0.0, 1.0],
             )
