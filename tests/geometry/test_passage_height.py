@@ -19,7 +19,6 @@ import numpy as np
 import pytest
 
 from cascade.geometry import MeshLOD, impeller_mesh
-from cascade.geometry._curves import default_shroud_control_points
 from cascade.geometry.impeller import (
     LOD_RESOLUTION,
     _build_meridional_curves as cc_meridional_curves,
@@ -107,14 +106,12 @@ class TestCurveLevelPassageHeight:
         )
 
     def test_degenerate_blade_height_raises(self) -> None:
+        # b2 + clearance leaves under 5% of the axial length (0.06 m for
+        # this r2) — the contour builder must refuse rather than loft a
+        # collapsed passage.
+        geom = _cc_geometry(blade_height_outlet=0.058)
         with pytest.raises(ValueError, match="degenerate shroud"):
-            default_shroud_control_points(
-                r_inlet=0.050,
-                r_outlet=0.100,
-                z_axial=0.060,
-                tip_clearance=0.0005,
-                blade_height_radial=0.060,
-            )
+            cc_meridional_curves(geom, 20)
 
 
 class TestMeshLevelPassageHeight:

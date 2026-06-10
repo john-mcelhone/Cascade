@@ -7,10 +7,15 @@ r, large z). The blade-angle convention differs accordingly.
 
 Algorithm mirrors `cascade.geometry.impeller.centrifugal_impeller_mesh`;
 see that module for the recipe. The differences here are:
-- Hub & shroud control points are mirrored in z.
-- The LE blade angle is the radial-inflow `inlet_metal_angle_rad` (often
-  zero for a "radial" rotor; nonzero for a backswept rotor).
-- The TE angle is the `exducer_angle_rad`.
+- Hub & shroud quarter-ellipse contours are mirrored: tangent radial at
+  the rotor inlet, axial at the exducer exit.
+- The LE blade angle is the radial-inflow `inlet_metal_angle_rad`
+  (zero for the standard radial-fibered rotor; nonzero for a backswept
+  rotor), span-constant across the narrow inlet.
+- The TE angle is the `exducer_angle_rad`, referenced to the RMS-mean
+  exducer radius and radius-scaled across the span (``tan β ∝ r``): the
+  exducer hub unwinds, the exducer tip wraps harder — the standard
+  free-vortex exducer twist.
 - The "axial face" of the rotor disc is on the upstream side; the
   "back face" is the exducer side.
 """
@@ -24,15 +29,10 @@ import numpy as np
 import trimesh
 
 from cascade.geometry._curves import (
-    blade_angle_distribution,
     blade_thickness_distribution,
-    camber_theta_from_beta,
-    cubic_bspline_curve,
-    default_hub_control_points,
-    default_shroud_control_points,
-    disc_cap,
-    loft_blade_surface,
-    meridional_arc_length,
+    grid_to_cartesian,
+    meridional_contour,
+    passage_camber_grid,
     surface_of_revolution,
     triangulate_quad_grid,
 )
@@ -70,26 +70,49 @@ def _build_meridional_curves(
     # (0, r_out_hub). The shroud starts at the same radius r_inlet but
     # axially offset by blade_height_inlet + tip_clearance (at the radial
     # LE the passage height and clearance are both axial), and ends at
-    # (0, r_out_tip).
-    # We use the centrifugal default-hub helper with flow="radial" which
-    # gives the mirror shape.
-    hub_ctrl = default_hub_control_points(
-        r_inlet=r_inlet,
-        r_outlet=r_out_hub,
-        z_axial=z_axial,
-        flow="radial",
+    # (0, r_out_tip - tip_clearance) — at the axial exducer the clearance
+    # is radial. Both contours are tangency-correct quarter-ellipses:
+    # radial at the rotor inlet, axial at the exducer.
+    z_shroud_inlet = z_axial - (geometry.blade_height_inlet + tip_clr)
+    # Same 5% degenerate-shroud floor as the centrifugal generator.
+    if z_shroud_inlet <= 0.05 * z_axial:
+        raise ValueError(
+            f"blade_height_inlet + tip_clearance "
+            f"({geometry.blade_height_inlet + tip_clr:.4g}) leaves under "
+            f"5% of the meridional axial length ({z_axial:.4g}); "
+            f"degenerate shroud curve"
+        )
+
+    z_hub, r_hub = meridional_contour(
+        z_axial, r_inlet, 0.0, r_out_hub, n_meridional,
+        start_tangent="radial",
     )
-    shroud_ctrl = default_shroud_control_points(
-        r_inlet=r_inlet,
-        r_outlet=r_out_tip,
-        z_axial=z_axial,
-        tip_clearance=tip_clr,
-        blade_height_radial=geometry.blade_height_inlet,
-        flow="radial",
+    z_shroud, r_shroud = meridional_contour(
+        z_shroud_inlet, r_inlet, 0.0, r_out_tip - tip_clr, n_meridional,
+        start_tangent="radial",
     )
-    z_hub, r_hub = cubic_bspline_curve(hub_ctrl, n_meridional)
-    z_shroud, r_shroud = cubic_bspline_curve(shroud_ctrl, n_meridional)
     return z_hub, r_hub, z_shroud, r_shroud
+
+
+def blade_metal_angles(
+    geometry: RadialTurbineGeometry,
+) -> Tuple[float, float, float]:
+    """LE / TE-hub / TE-tip blade metal angles (from meridional), radians.
+
+    The LE angle is span-constant (`inlet_metal_angle_rad`; zero for the
+    standard radial-fibered rotor). ``exducer_angle_rad`` is referenced
+    to the RMS-mean exducer radius and radius-scaled across the span
+    (``tan β ∝ r`` — free-vortex exducer twist, Whitfield & Baines 1990
+    §6.3): the hub unwinds, the tip wraps harder.
+    """
+    beta_le = float(geometry.inlet_metal_angle_rad)
+    r_h = geometry.rotor_outlet_radius_hub
+    r_t = geometry.rotor_outlet_radius_tip
+    r_ref = math.sqrt(0.5 * (r_h * r_h + r_t * r_t))
+    tan_ref = math.tan(geometry.exducer_angle_rad)
+    beta_te_hub = math.atan(tan_ref * r_h / max(r_ref, 1e-12))
+    beta_te_tip = math.atan(tan_ref * r_t / max(r_ref, 1e-12))
+    return beta_le, beta_te_hub, beta_te_tip
 
 
 def _build_single_blade(
@@ -104,30 +127,33 @@ def _build_single_blade(
     fractional_chord_start: float = 0.0,
     fractional_chord_end: float = 1.0,
 ) -> trimesh.Trimesh:
-    """Build a single RIT blade as a closed shell."""
+    """Build a single RIT blade as a closed shell.
+
+    The camber is built over the full chord by per-streamline wrap
+    integration (radial-fibered at the inlet, free-vortex twist at the
+    exducer — see `blade_metal_angles`) and sliced afterwards, so a
+    splitter is the same camber surface cut short at its LE.
+    """
     n_m_full = len(z_hub)
+
+    beta_le, beta_te_hub, beta_te_tip = blade_metal_angles(geometry)
+    Z_grid, R_grid, theta_grid = passage_camber_grid(
+        z_hub, r_hub, z_shroud, r_shroud,
+        beta_le_hub_rad=beta_le,
+        beta_le_shroud_rad=beta_le,
+        beta_te_hub_rad=beta_te_hub,
+        beta_te_shroud_rad=beta_te_tip,
+        n_span=n_span,
+    )
+
     i0 = int(round(fractional_chord_start * (n_m_full - 1)))
     i1 = int(round(fractional_chord_end * (n_m_full - 1)))
-    z_hub_b = z_hub[i0:i1 + 1]
-    r_hub_b = r_hub[i0:i1 + 1]
-    z_sh_b = z_shroud[i0:i1 + 1]
-    r_sh_b = r_shroud[i0:i1 + 1]
-    n_m = len(z_hub_b)
+    Z_grid = Z_grid[i0:i1 + 1]
+    R_grid = R_grid[i0:i1 + 1]
+    theta_grid = theta_grid[i0:i1 + 1] + theta_offset
+    n_m = i1 - i0 + 1
     if n_m < 3:
         raise ValueError("blade segment too short — increase LOD or chord range")
-
-    s_hub = meridional_arc_length(z_hub_b, r_hub_b)
-
-    # RIT blade-angle distribution: at the radial inlet the canonical
-    # design is zero incidence (β₁_blade = 0 from axial → purely radial
-    # blade). At the exducer the angle is the metal exducer angle (e.g.
-    # 60° from axial).
-    beta_le = geometry.inlet_metal_angle_rad
-    beta_te = geometry.exducer_angle_rad
-    beta = blade_angle_distribution(n_m, beta_le, beta_te)
-
-    theta_hub_camber = camber_theta_from_beta(s_hub, r_hub_b, beta)
-    theta_shroud_camber = theta_hub_camber.copy()
 
     # 1.5% of rotor inlet radius (typical), floored at the casting minimum
     # (RIT rotors are cast, not milled — see manufacturability.limits).
@@ -136,27 +162,10 @@ def _build_single_blade(
     t_max_m = cast_blade_peak_thickness_m(geometry.rotor_inlet_radius)
     t_distribution = blade_thickness_distribution(n_m, t_max_m)
 
-    theta_hub_camber = theta_hub_camber + theta_offset
-    theta_shroud_camber = theta_shroud_camber + theta_offset
+    dtheta = 0.5 * t_distribution[:, None] / np.maximum(R_grid, 1e-9)
 
-    r_mid = 0.5 * (r_hub_b + r_sh_b)
-    dtheta = 0.5 * t_distribution / np.maximum(r_mid, 1e-6)
-
-    theta_ps_hub = theta_hub_camber - dtheta
-    theta_ss_hub = theta_hub_camber + dtheta
-    theta_ps_sh = theta_shroud_camber - dtheta
-    theta_ss_sh = theta_shroud_camber + dtheta
-
-    pts_ps = loft_blade_surface(
-        z_hub_b, r_hub_b, z_sh_b, r_sh_b,
-        theta_ps_hub, theta_ps_sh,
-        n_span=n_span,
-    )
-    pts_ss = loft_blade_surface(
-        z_hub_b, r_hub_b, z_sh_b, r_sh_b,
-        theta_ss_hub, theta_ss_sh,
-        n_span=n_span,
-    )
+    pts_ps = grid_to_cartesian(R_grid, theta_grid - dtheta, Z_grid)
+    pts_ss = grid_to_cartesian(R_grid, theta_grid + dtheta, Z_grid)
 
     v_ps, f_ps = triangulate_quad_grid(pts_ps, flip=True)
     v_ss, f_ss = triangulate_quad_grid(pts_ss, flip=False)
@@ -327,29 +336,35 @@ def radial_turbine_mesh(
         geometry, n_meridional,
     )
 
+    # ``blade_count`` is the TOTAL blade count — with splitters the budget
+    # splits into Z/2 full blades + Z/2 splitters at half pitch (mirrors
+    # the centrifugal generator; see impeller.py for the rationale).
+    Z = geometry.blade_count
+    use_splitters = with_splitter and Z >= 8 and Z % 2 == 0
+    n_main = Z // 2 if use_splitters else Z
+
     main_blade_template = _build_single_blade(
         geometry, z_hub, r_hub, z_shroud, r_shroud, n_span,
     )
-    Z = geometry.blade_count
     blades: List[trimesh.Trimesh] = []
-    for k in range(Z):
+    for k in range(n_main):
         T = trimesh.transformations.rotation_matrix(
-            angle=2.0 * math.pi * k / Z, direction=[0.0, 0.0, 1.0],
+            angle=2.0 * math.pi * k / n_main, direction=[0.0, 0.0, 1.0],
         )
         b = main_blade_template.copy()
         b.apply_transform(T)
         blades.append(b)
 
-    if with_splitter and Z >= 6:
+    if use_splitters:
         splitter_template = _build_single_blade(
             geometry, z_hub, r_hub, z_shroud, r_shroud, n_span,
-            theta_offset=math.pi / Z,
-            fractional_chord_start=0.5,
+            theta_offset=math.pi / n_main,
+            fractional_chord_start=0.35,
             fractional_chord_end=1.0,
         )
-        for k in range(Z):
+        for k in range(n_main):
             T = trimesh.transformations.rotation_matrix(
-                angle=2.0 * math.pi * k / Z, direction=[0.0, 0.0, 1.0],
+                angle=2.0 * math.pi * k / n_main, direction=[0.0, 0.0, 1.0],
             )
             b = splitter_template.copy()
             b.apply_transform(T)

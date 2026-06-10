@@ -1,14 +1,14 @@
 """Curve and surface primitives for impeller / volute mesh generation.
 
-The module is private to :mod:`cascade.geometry`. It collects the B-spline
-sampling, blade-camber integration, and lofting helpers so the public
-mesh generators read like a recipe.
+The module is private to :mod:`cascade.geometry`. It collects the
+meridional-contour sampling, blade-camber integration, and grid helpers
+so the public mesh generators read like a recipe.
 
 References:
 - Whitfield, A. & Baines, N.C., 1990. *Design of Radial Turbomachines*,
   Longman, §6.5 (blade geometry generation).
 - Aungier, R.H., 2000. *Centrifugal Compressors*, ASME Press, §5.3
-  (meridional channel B-spline parameterization).
+  (meridional channel parameterization).
 """
 
 from __future__ import annotations
@@ -17,160 +17,57 @@ import math
 from typing import List, Tuple
 
 import numpy as np
-from scipy.interpolate import splev, splprep
 
 
 # -----------------------------------------------------------------------------
-# B-spline meridional curves (hub + shroud)
+# Meridional contours (hub + shroud)
 # -----------------------------------------------------------------------------
 
 
-def cubic_bspline_curve(
-    control_points: np.ndarray,
+def meridional_contour(
+    z_start: float,
+    r_start: float,
+    z_end: float,
+    r_end: float,
     n_samples: int,
+    *,
+    start_tangent: str,
 ) -> Tuple[np.ndarray, np.ndarray]:
-    """Sample a 2D cubic B-spline through the given control points.
+    """Sample a quarter-ellipse meridional contour with exact end tangency.
+
+    This is the canonical industry shape for a radial-machine flow path
+    (Aungier 2000 §5.3): the curve leaves the start point tangent to one
+    principal direction and arrives at the end point tangent to the other,
+    with monotonic z and r and a single curvature sign — no interpolation
+    wiggle, no inflection ripples.
 
     Args:
-        control_points: ``(N, 2)`` array of (z, r) waypoints in meridional plane.
-        n_samples: number of sample points returned along the curve.
+        z_start, r_start: contour start point (the blade LE end).
+        z_end, r_end: contour end point (the blade TE end).
+        n_samples: number of points returned along the curve.
+        start_tangent: ``"axial"`` for a centrifugal-compressor channel
+            (axial inducer inlet turning to a radial exit) or ``"radial"``
+            for a radial-inflow-turbine channel (radial rotor inlet
+            turning to an axial exducer).
 
     Returns:
-        Pair ``(z, r)`` of 1D arrays of length ``n_samples``.
-
-    The spline interpolates the first and last control points exactly and
-    smooths the interior — exactly the shape needed for a hub/shroud
-    meridional curve where the inlet and outlet radii are fixed by the
-    velocity-triangle design and the interior bow is a free shape parameter.
+        Pair ``(z, r)`` of 1D arrays of length ``n_samples`` running from
+        the start point to the end point.
     """
-    ctrl = np.asarray(control_points, dtype=float)
-    if ctrl.shape[1] != 2:
+    t = np.linspace(0.0, 0.5 * math.pi, n_samples)
+    if start_tangent == "axial":
+        # dr/dt = 0 at t=0 (axial inlet); dz/dt = 0 at t=pi/2 (radial exit).
+        z = z_start + (z_end - z_start) * np.sin(t)
+        r = r_start + (r_end - r_start) * (1.0 - np.cos(t))
+    elif start_tangent == "radial":
+        # dz/dt = 0 at t=0 (radial inlet); dr/dt = 0 at t=pi/2 (axial exit).
+        z = z_end + (z_start - z_end) * np.cos(t)
+        r = r_start + (r_end - r_start) * np.sin(t)
+    else:
         raise ValueError(
-            f"control_points must have shape (N, 2), got {ctrl.shape}",
+            f"start_tangent must be 'axial' or 'radial', got {start_tangent!r}"
         )
-    if ctrl.shape[0] < 3:
-        raise ValueError("need at least 3 control points for a cubic curve")
-
-    # scipy splprep wants axes as separate arrays; degree=min(3, n-1) so the
-    # call survives n=3 (degenerates to quadratic) without raising.
-    k = min(3, ctrl.shape[0] - 1)
-    tck, _u = splprep(
-        [ctrl[:, 0], ctrl[:, 1]],
-        k=k,
-        s=0.0,  # exact interpolation
-    )
-    u_eval = np.linspace(0.0, 1.0, n_samples)
-    z, r = splev(u_eval, tck)
-    return np.asarray(z, dtype=float), np.asarray(r, dtype=float)
-
-
-def default_hub_control_points(
-    r_inlet: float,
-    r_outlet: float,
-    z_axial: float,
-    *,
-    flow: str = "centrifugal",
-) -> np.ndarray:
-    """Generate canonical control points for an impeller hub curve.
-
-    The hub is the "inner" meridional boundary. For a centrifugal compressor
-    it sweeps from the axial inlet (z=0, r=r_inducer_hub) to the radial
-    outlet (z=z_axial, r=r_impeller_outer). The interior bow is a smooth
-    S-curve typical of Concepts-NREC / Aungier-style designs.
-
-    For a radial inflow turbine the convention is reversed: flow enters
-    radially and exits axially; we generate the same shape with axes
-    swapped at the caller.
-    """
-    if flow == "centrifugal":
-        # Concepts-NREC style hub: axial inducer that turns to radial outlet.
-        # 5 control points form a smooth knee.
-        return np.array(
-            [
-                [0.0, r_inlet],
-                [0.25 * z_axial, r_inlet * 1.05],
-                [0.60 * z_axial, 0.35 * (r_inlet + r_outlet)],
-                [0.85 * z_axial, 0.85 * r_outlet],
-                [z_axial, r_outlet],
-            ]
-        )
-    # radial inflow turbine: mirror direction. Inlet at z=z_axial (radial),
-    # outlet at z=0 (axial). Same hub shape, swept the other way.
-    return np.array(
-        [
-            [z_axial, r_inlet],
-            [0.75 * z_axial, r_inlet * 0.95],
-            [0.40 * z_axial, 0.35 * (r_inlet + r_outlet)],
-            [0.15 * z_axial, 0.85 * r_outlet],
-            [0.0, r_outlet],
-        ]
-    )
-
-
-def default_shroud_control_points(
-    r_inlet: float,
-    r_outlet: float,
-    z_axial: float,
-    tip_clearance: float,
-    *,
-    blade_height_radial: float,
-    flow: str = "centrifugal",
-) -> np.ndarray:
-    """Generate canonical control points for an impeller shroud curve.
-
-    ``blade_height_radial`` is the design passage height at the *radial*
-    end of the channel — ``blade_height_outlet`` (b2) for a centrifugal
-    compressor trailing edge, ``blade_height_inlet`` (b1) for a radial
-    inflow turbine leading edge. At a radial station the meridional
-    direction is radial, so both the passage height and the tip-clearance
-    offset are *axial*: the shroud ends at full radius ``r_outlet`` with
-    its z offset from the hub exit plane by ``blade_height_radial +
-    tip_clearance``. (At the axial end of an RIT channel the passage
-    height is radial and already enters via the hub/shroud radii; there
-    the radial ``tip_clearance`` subtraction is the correct convention.)
-
-    For an unshrouded (open) impeller the "shroud" in this mesh generator
-    is the virtual casing surface; for a shrouded impeller the curve is
-    the actual shroud disc. Blades loft all the way to this curve, so the
-    rendered passage at the radial end is ``blade_height_radial +
-    tip_clearance`` (no discrete tip gap is modeled — see KG-G-05).
-    """
-    z_rad = z_axial - (blade_height_radial + tip_clearance)
-    # 5% floor, not just > 0: a shroud compressed into a sliver of the
-    # axial span produces a near-vertical spline with wild interpolants —
-    # fail loudly instead of lofting garbage blades.
-    if z_rad <= 0.05 * z_axial:
-        raise ValueError(
-            f"blade_height_radial + tip_clearance "
-            f"({blade_height_radial + tip_clearance:.4g}) leaves under 5% "
-            f"of the meridional axial length ({z_axial:.4g}); degenerate "
-            f"shroud curve"
-        )
-    r_in_eff = r_inlet
-    if flow == "centrifugal":
-        # Interior z-fractions scale by z_rad (not z_axial): with b2 up to
-        # ~26 mm, 0.90*z_axial could exceed z_rad and fold the spline back.
-        return np.array(
-            [
-                [0.0, r_in_eff],
-                [0.30 * z_rad, r_in_eff * 1.10],
-                [0.65 * z_rad, 0.45 * (r_in_eff + r_outlet)],
-                [0.90 * z_rad, 0.92 * r_outlet],
-                [z_rad, r_outlet],
-            ]
-        )
-    # radial inflow turbine: mirror — the radial end is the INLET. The
-    # exducer (axial end) keeps the radial clearance subtraction.
-    r_out_eff = r_outlet - tip_clearance
-    return np.array(
-        [
-            [z_rad, r_in_eff],
-            [0.70 * z_rad, r_in_eff * 0.92],
-            [0.35 * z_rad, 0.45 * (r_in_eff + r_out_eff)],
-            [0.10 * z_rad, 0.92 * r_out_eff],
-            [0.0, r_out_eff],
-        ]
-    )
+    return z, r
 
 
 # -----------------------------------------------------------------------------
@@ -236,6 +133,85 @@ def camber_theta_from_beta(
     return theta
 
 
+def passage_camber_grid(
+    z_hub: np.ndarray,
+    r_hub: np.ndarray,
+    z_shroud: np.ndarray,
+    r_shroud: np.ndarray,
+    *,
+    beta_le_hub_rad: float,
+    beta_le_shroud_rad: float,
+    beta_te_hub_rad: float,
+    beta_te_shroud_rad: float,
+    n_span: int,
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Blade camber surface from per-streamline wrap integration.
+
+    This is how production blade generators (and validated open tools
+    like RadialDesigner) build the camber: every spanwise streamline gets
+    its OWN meridional arc length and its OWN blade-angle distribution,
+    and the wrap angle is integrated per streamline via
+    ``dθ/dm = tan(β)/r``. The result is the physically correct twisted
+    inducer — the hub sees a shallow metal angle (low wheel speed), the
+    shroud a steep one — instead of one streamline's wrap copied across
+    the span (which over-wraps the blade into an un-millable corkscrew).
+
+    Args:
+        z_hub, r_hub: hub meridional curve, ``(n_m,)`` each.
+        z_shroud, r_shroud: shroud meridional curve, ``(n_m,)`` each.
+        beta_le_hub_rad / beta_le_shroud_rad: LE metal angle at hub / shroud
+            (from meridional).
+        beta_te_hub_rad / beta_te_shroud_rad: TE metal angle at hub / shroud.
+            Equal for a centrifugal impeller (β₂ is span-constant across the
+            narrow exit); radius-scaled for an RIT exducer.
+        n_span: number of spanwise stations (hub → shroud).
+
+    Returns:
+        ``(Z, R, theta)`` grids, each ``(n_m, n_span)``. ``theta`` starts
+        at 0 on every streamline's LE.
+    """
+    n_m = len(z_hub)
+    if not (len(r_hub) == len(z_shroud) == len(r_shroud) == n_m):
+        raise ValueError("inconsistent input lengths in passage_camber_grid")
+
+    span = np.linspace(0.0, 1.0, n_span)
+    Z = np.outer(z_hub, 1.0 - span) + np.outer(z_shroud, span)
+    R = np.outer(r_hub, 1.0 - span) + np.outer(r_shroud, span)
+
+    beta_le = beta_le_hub_rad + span * (beta_le_shroud_rad - beta_le_hub_rad)
+    beta_te = beta_te_hub_rad + span * (beta_te_shroud_rad - beta_te_hub_rad)
+
+    # Per-streamline meridional arc length and normalized chord fraction.
+    ds = np.hypot(np.diff(Z, axis=0), np.diff(R, axis=0))  # (n_m-1, n_span)
+    s = np.vstack([np.zeros((1, n_span)), np.cumsum(ds, axis=0)])
+    m_frac = s / np.maximum(s[-1, :], 1e-30)
+
+    # Smooth-step β blend LE → TE per streamline (same Hermite ramp as
+    # blade_angle_distribution, here against true arc fraction).
+    blend = 3.0 * m_frac**2 - 2.0 * m_frac**3
+    beta = beta_le[None, :] + (beta_te - beta_le)[None, :] * blend
+    # Keep tan(β) finite if a caller hands in a near-tangential angle.
+    beta = np.clip(beta, -1.48, 1.48)
+
+    integrand = np.tan(beta) / np.maximum(R, 1e-9)
+    theta = np.zeros_like(R)
+    theta[1:, :] = np.cumsum(
+        0.5 * (integrand[1:, :] + integrand[:-1, :]) * ds, axis=0
+    )
+    return Z, R, theta
+
+
+def grid_to_cartesian(
+    R: np.ndarray,
+    theta: np.ndarray,
+    Z: np.ndarray,
+) -> np.ndarray:
+    """Convert cylindrical (R, θ, Z) grids to an ``(..., 3)`` Cartesian array."""
+    return np.stack(
+        [R * np.cos(theta), R * np.sin(theta), Z], axis=-1
+    )
+
+
 def blade_thickness_distribution(
     n_stations: int,
     t_max: float,
@@ -272,46 +248,8 @@ def blade_thickness_distribution(
 
 
 # -----------------------------------------------------------------------------
-# 3D blade surface lofting
+# Structured-grid triangulation
 # -----------------------------------------------------------------------------
-
-
-def loft_blade_surface(
-    z_hub: np.ndarray,
-    r_hub: np.ndarray,
-    z_shroud: np.ndarray,
-    r_shroud: np.ndarray,
-    theta_hub: np.ndarray,
-    theta_shroud: np.ndarray,
-    *,
-    n_span: int,
-) -> np.ndarray:
-    """Loft a single ruled blade surface from hub-to-shroud.
-
-    Linear interpolation across the spanwise direction. Each meridional
-    station yields ``n_span`` points along the (hub → shroud) ruled line,
-    each at the wrap angle θ(span) linearly interpolated.
-
-    Returns:
-        ``(n_meridional, n_span, 3)`` array of (x, y, z) points.
-        The 3D Cartesian frame is right-handed with z as the machine axis.
-    """
-    n_m = len(z_hub)
-    if not (len(r_hub) == len(z_shroud) == len(r_shroud) == len(theta_hub)
-            == len(theta_shroud) == n_m):
-        raise ValueError("inconsistent input lengths in loft_blade_surface")
-
-    pts = np.empty((n_m, n_span, 3), dtype=float)
-    span = np.linspace(0.0, 1.0, n_span)
-    for i in range(n_m):
-        # Ruled-line span interpolation in (z, r, θ).
-        z_line = (1.0 - span) * z_hub[i] + span * z_shroud[i]
-        r_line = (1.0 - span) * r_hub[i] + span * r_shroud[i]
-        th_line = (1.0 - span) * theta_hub[i] + span * theta_shroud[i]
-        pts[i, :, 0] = r_line * np.cos(th_line)
-        pts[i, :, 1] = r_line * np.sin(th_line)
-        pts[i, :, 2] = z_line
-    return pts
 
 
 def triangulate_quad_grid(

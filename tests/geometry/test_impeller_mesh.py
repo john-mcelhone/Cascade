@@ -107,15 +107,32 @@ class TestImpellerBladeIslands:
         assert abs(cx) < 0.05 * max_r
         assert abs(cy) < 0.05 * max_r
 
-    def test_splitter_adds_geometry(self) -> None:
-        geom = _eckardt_rotor_o_geometry()
-        m_no_split = impeller_mesh(geom, lod=MeshLOD.STANDARD,
-                                   with_splitter=False)
+    def test_splitter_respects_blade_count_budget(self) -> None:
+        """``blade_count`` is the TOTAL blade count (it is what the
+        meanline slip/loading correlations were scored with). With
+        splitters the budget splits Z/2 + Z/2, so the mesh must carry
+        LESS metal than Z full blades (splitters are short) but MORE
+        than Z/2 full blades alone."""
+        geom = _eckardt_rotor_o_geometry()  # Z = 20
+        geom_half = _eckardt_rotor_o_geometry(blade_count=10)
         m_split = impeller_mesh(geom, lod=MeshLOD.STANDARD,
                                 with_splitter=True)
-        # Adding splitter blades must add vertices and faces.
-        assert m_split.vertices.shape[0] > m_no_split.vertices.shape[0]
-        assert m_split.faces.shape[0] > m_no_split.faces.shape[0]
+        m_full = impeller_mesh(geom, lod=MeshLOD.STANDARD,
+                               with_splitter=False)
+        m_half = impeller_mesh(geom_half, lod=MeshLOD.STANDARD,
+                               with_splitter=False)
+        assert m_half.vertices.shape[0] < m_split.vertices.shape[0]
+        assert m_split.vertices.shape[0] < m_full.vertices.shape[0]
+
+    def test_splitter_falls_back_for_odd_blade_count(self) -> None:
+        """An odd blade count cannot split into a symmetric main+splitter
+        pattern — the generator renders all blades full-length instead."""
+        geom = _eckardt_rotor_o_geometry(blade_count=15)
+        m_split = impeller_mesh(geom, lod=MeshLOD.STANDARD,
+                                with_splitter=True)
+        m_full = impeller_mesh(geom, lod=MeshLOD.STANDARD,
+                               with_splitter=False)
+        assert m_split.vertices.shape[0] == m_full.vertices.shape[0]
 
 
 class TestImpellerExports:
