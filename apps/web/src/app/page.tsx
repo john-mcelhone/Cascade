@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { Logo, CascadeMark } from "@/components/shell/logo";
 import { Button } from "@/components/ui/button";
+import { AsciiWindTunnel } from "@/components/marketing/ascii-wind-tunnel";
 
 /**
  * Cascade landing page — the front door for both audiences: a curious
@@ -55,13 +56,24 @@ export default function Home() {
 
       <main className="flex flex-1 flex-col">
         {/* ───────────────────────── Hero ───────────────────────── */}
-        <section className="relative overflow-hidden border-b border-border-subtle">
+        {/* `isolate` gives the section its own stacking context so the
+            -z-10 canvas paints above the page background, below content. */}
+        <section className="relative isolate overflow-hidden border-b border-border-subtle">
+          {/* Live ASCII wind tunnel — potential flow around your cursor. */}
+          <AsciiWindTunnel className="absolute inset-0 -z-10 [mask-image:linear-gradient(to_bottom,black_82%,transparent)]" />
+
+          {/* Wind-tunnel placard — invites play, bottom-left like a test-cell tag. */}
           <div
             aria-hidden
-            className="bg-blueprint pointer-events-none absolute inset-0 -z-10 [mask-image:radial-gradient(ellipse_at_top_left,black,transparent_75%)]"
-          />
+            className="pointer-events-none absolute bottom-3 left-5 hidden items-center gap-2 lg:flex"
+          >
+            <span className="led led-pulse bg-accent" />
+            <span className="micro-label">
+              Wind tunnel · potential flow · move cursor — hold to add circulation
+            </span>
+          </div>
 
-          <div className="mx-auto w-full max-w-6xl px-5 py-14 sm:py-20">
+          <div className="relative mx-auto w-full max-w-6xl px-5 py-14 sm:py-20">
             <div className="grid items-center gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,28rem)]">
               <div className="flex flex-col gap-6">
                 <div className="animate-fade-in-up inline-flex items-center gap-3">
