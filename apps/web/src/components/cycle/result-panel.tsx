@@ -141,7 +141,16 @@ export function ResultPanel({ nodes }: ResultPanelProps) {
                   </tr>
                 ) : (
                   result.components.map((c) => {
-                    const node = nodes.find((n) => n.id === c.componentId);
+                    const node = nodes.find(
+                      (n) =>
+                        n.id === c.componentId || n.label === c.componentId,
+                    );
+                    // U7: in fuel-mass-flow mode the burner outlet Tt (the
+                    // TIT) is back-derived from ṁ_fuel — label it so the
+                    // user knows it's a solver output, not their input.
+                    const titDerived =
+                      node?.kind === "burner" &&
+                      node.params?.spec_mode === "fuel_mass_flow";
                     return (
                       <tr key={c.componentId}>
                         <td className="px-2 py-1 font-sans">
@@ -155,6 +164,11 @@ export function ResultPanel({ nodes }: ResultPanelProps) {
                         </td>
                         <td className="px-2 py-1 text-right tabular-nums">
                           {fmtNumber(c.outletTemperature, { decimals: 0 })}
+                          {titDerived && (
+                            <span className="ml-1 font-sans text-[10px] text-text-muted">
+                              (derived)
+                            </span>
+                          )}
                         </td>
                         <td className="px-2 py-1 text-right tabular-nums">
                           {fmtNumber(c.outletPressure, { decimals: 1 })}

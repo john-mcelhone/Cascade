@@ -215,14 +215,23 @@ function rebuildChips(
         { symbol: "PR", value: fmt(num("pressure_ratio")) },
         { symbol: "η", value: fmt(num("efficiency_isentropic")) },
       ];
-    case "burner":
+    case "burner": {
+      // U7: in fuel-mass-flow mode the TIT is a solver OUTPUT — rendering
+      // the stored outlet_temperature_K would show a stale number the
+      // solver no longer honours. Emit a `derived` chip instead; the
+      // canvas (BaseNode) fills its value in from the latest solve and
+      // greys it while stale.
+      const fuelMode = params.spec_mode === "fuel_mass_flow";
       return [
-        { symbol: "T₃", value: `${fmt(num("outlet_temperature_K"))} K` },
+        fuelMode
+          ? { symbol: "T₃", value: "—", derived: true }
+          : { symbol: "T₃", value: `${fmt(num("outlet_temperature_K"))} K` },
         {
           symbol: "ΔP",
           value: `${fmt((num("pressure_drop_fraction") ?? 0) * 100, 1)} %`,
         },
       ];
+    }
     case "recuperator":
       return [
         { symbol: "ε", value: fmt(num("effectiveness")) },
@@ -907,10 +916,15 @@ class RealApiClient implements ApiClient {
 
   async getProject(id: string): Promise<Project | undefined> {
     try {
-      const backend = await fetchJson<BackendProjectSummary>(
+      // The detail endpoint also carries `settings`; surface the
+      // air-standard flag so the UI can disable fuel-mass-flow mode (U7)
+      // without waiting for the backend's synchronous 422.
+      const backend = await fetchJson<BackendProjectDetail>(
         `/api/projects/${encodeURIComponent(id)}`,
       );
-      return adaptProjectSummary(backend);
+      const project = adaptProjectSummary(backend);
+      project.airStandard = Boolean(backend.settings?.air_standard);
+      return project;
     } catch (err) {
       if (
         err instanceof ApiError &&

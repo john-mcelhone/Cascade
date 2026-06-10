@@ -8,6 +8,7 @@ from typing import Any, Dict, List
 from fastapi import APIRouter, HTTPException, status
 
 from deps import get_project_or_404
+from jobs import PROJECTS
 from models import (
     ComponentCreateRequest,
     ComponentModel,
@@ -77,6 +78,13 @@ def update_component(
                             bc[k] = v
             if req.position is not None:
                 comp["position"] = dict(req.position)
+            # Save-through (U7): persist the edit to the TOML store NOW.
+            # Without this, component edits reached disk only when some
+            # job's worker happened to call PROJECTS.save — persistence
+            # was incidental, and edits survived a restart only by luck.
+            # Known side effect: save() flushes the WHOLE cached project
+            # (acceptable for the single-user TOML store).
+            PROJECTS.save(project_id)
             return ComponentModel.model_validate(comp)
     raise HTTPException(
         status_code=status.HTTP_404_NOT_FOUND,

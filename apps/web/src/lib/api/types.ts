@@ -20,6 +20,13 @@ export interface Project {
   createdAt: string;
   updatedAt: string;
   workingFluid: WorkingFluid;
+  /**
+   * Project-level air-standard (ideal Brayton) flag — the public F1
+   * setting. Populated by `getProject` (the detail endpoint carries
+   * `settings`); undefined on list summaries. U7 uses it to disable the
+   * burner's fuel-mass-flow spec mode (no combustion → no fuel stream).
+   */
+  airStandard?: boolean;
   /** Headline metric for the project card sparkline. */
   headline: {
     label: string;
@@ -49,8 +56,16 @@ export interface CycleNode {
   label: string;
   x: number;
   y: number;
-  /** Display-only parameter chips (e.g. PR for compressor). */
-  chips: Array<{ symbol: string; value: string }>;
+  /**
+   * Display-only parameter chips (e.g. PR for compressor).
+   *
+   * `derived: true` marks a chip whose value is a solver OUTPUT, not a
+   * stored parameter (U7: the burner T₃ chip in fuel-mass-flow mode shows
+   * the back-derived TIT). The canvas fills the value in from the latest
+   * solve and greys it while stale — it must never render a stored value
+   * the solver no longer honours.
+   */
+  chips: Array<{ symbol: string; value: string; derived?: boolean }>;
   /** Optional parameter bag for backend round-trip. */
   params?: Record<string, number | string | boolean>;
 }

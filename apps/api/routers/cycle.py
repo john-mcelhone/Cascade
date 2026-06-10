@@ -80,6 +80,29 @@ class MissingRequiredComponents(ValueError):
         )
 
 
+class BurnerSpecInvalid(ValueError):
+    """Raised by ``_build_recuperated_spec`` when the Burner params bag
+    cannot yield exactly one valid specification.
+
+    Covers the degenerate fuel-mass-flow bags (U7): ``spec_mode ==
+    "fuel_mass_flow"`` with no fuel value, or a value that is zero,
+    negative, or NaN — plus the symmetric outlet-temperature-mode bag with
+    no TIT. These are user-input problems, so they classify design-kind
+    (friendly explanation + suggestions), never as a software bug with a
+    traceback.
+
+    The ``code`` attribute mirrors ``RegimeOutOfValidity.code`` so the
+    worker's ``_refusal_cause_code`` picks it up automatically.
+    """
+
+    CAUSE_CODE = "BURNER_SPEC_INVALID"
+
+    def __init__(self, message: str, suggestions: List[str]) -> None:
+        super().__init__(message)
+        self.code = self.CAUSE_CODE
+        self.suggestions = list(suggestions)
+
+
 def _q(d: Dict[str, Any]):
     """Convert {value, unit} to a cascade Quantity."""
 
@@ -114,6 +137,72 @@ def _normalise_efficiency_mode(raw: str) -> str:
         "live_meanline": "live_meanline",
     }
     return _MAP.get(str(raw), "constant")
+
+
+def _resolve_burner_spec_mode(bp: Dict[str, Any]) -> str:
+    """Resolve which side of the burner energy balance the user pinned.
+
+    Component PATCH is merge-only, so a bag that has flipped modes once
+    holds BOTH ``outlet_temperature`` and ``fuel_mass_flow`` forever;
+    ``spec_mode`` is the discriminator (default ``outlet_temperature``).
+    Retaining the inactive value is intentional — flipping back restores
+    it (pinned by ``test_burner_fuel_mode.py``).
+
+    Legacy bags that predate ``spec_mode`` carry exactly one of the two
+    value keys, so when ``spec_mode`` is absent we infer the mode from
+    whichever key is present (default-mode inference). A bag with both
+    keys and no ``spec_mode`` keeps the historical behaviour:
+    outlet-temperature mode.
+    """
+    mode = bp.get("spec_mode")
+    if mode in ("outlet_temperature", "fuel_mass_flow"):
+        return str(mode)
+    if "fuel_mass_flow" in bp and "outlet_temperature" not in bp:
+        return "fuel_mass_flow"
+    return "outlet_temperature"
+
+
+def _burner_fuel_mass_flow_quantity(bp: Dict[str, Any]):
+    """Extract + validate the fuel mass flow for a fuel-mode Burner bag.
+
+    Raises ``BurnerSpecInvalid`` (design-class) for degenerate bags: the
+    key is absent, or the value is zero / negative / NaN. Refusing here —
+    before the Burner constructor — keeps user-input problems out of the
+    bug-classified traceback path (U7 / R8).
+    """
+    import math
+
+    from cascade.units import Q
+
+    _SUGGESTIONS = [
+        "Set a positive fuel mass flow in the Burner's properties (a 30 kW-class microturbine burns roughly 0.002 kg/s of natural gas).",
+        "Or switch the Burner's spec mode back to 'Outlet T (TIT)' to pin the turbine inlet temperature instead.",
+    ]
+    raw = bp.get("fuel_mass_flow")
+    if raw is None:
+        raise BurnerSpecInvalid(
+            "Burner is in fuel-mass-flow mode but no fuel mass flow is set.",
+            _SUGGESTIONS,
+        )
+    try:
+        if isinstance(raw, dict):
+            fuel_q = _q(raw)
+        else:
+            fuel_q = Q(float(raw), "kg/s")
+        fuel_si = float(fuel_q.to("kg/s").magnitude)
+    except Exception as exc:
+        raise BurnerSpecInvalid(
+            f"Burner fuel mass flow could not be read as a quantity: {raw!r}.",
+            _SUGGESTIONS,
+        ) from exc
+    if math.isnan(fuel_si) or math.isinf(fuel_si) or fuel_si <= 0.0:
+        raise BurnerSpecInvalid(
+            f"Burner fuel mass flow must be a positive, finite number; "
+            f"got {fuel_si} kg/s. Zero fuel means no heat addition — the "
+            f"cycle would have nothing to expand.",
+            _SUGGESTIONS,
+        )
+    return fuel_q
 
 
 def _build_compressor_geometry(params: Dict[str, Any]):
@@ -429,7 +518,38 @@ def _build_recuperated_spec(project: Dict[str, Any]):
         "combustion_efficiency": float(bp.get("combustion_efficiency", 0.99)),
         "air_standard": air_standard,
     }
-    if "outlet_temperature" in bp:
+    # U7: the Burner has two specification modes and the core constructor
+    # requires EXACTLY one of outlet_temperature / fuel_mass_flow. Because
+    # PATCH is merge-only the bag may hold both values; branch on the
+    # resolved spec_mode and pass exactly one kwarg.
+    spec_mode = _resolve_burner_spec_mode(bp)
+    if spec_mode == "fuel_mass_flow":
+        if air_standard:
+            # Belt-and-braces behind the synchronous 422 in the solve
+            # endpoint (_check_burner_fuel_mode_air_standard_conflict):
+            # the air-standard heat-addition model has no combustion, so
+            # there is no fuel stream to pin. Refuse design-class rather
+            # than letting the core constructor traceback as a bug.
+            raise BurnerSpecInvalid(
+                "Fuel mass-flow mode requires a combustion working fluid; "
+                "this project runs the burner as an air-standard / "
+                "pure-fluid heat exchanger (no fuel stream exists).",
+                [
+                    "Switch the Burner's spec mode back to 'Outlet T (TIT)'.",
+                    "Or switch the project to the open-air combustion working fluid to use fuel-mass-flow mode.",
+                ],
+            )
+        burner_kwargs["fuel_mass_flow"] = _burner_fuel_mass_flow_quantity(bp)
+    else:
+        if "outlet_temperature" not in bp:
+            raise BurnerSpecInvalid(
+                "Burner is in outlet-temperature mode but no outlet "
+                "temperature (TIT) is set.",
+                [
+                    "Set the Burner's outlet temperature (a 30 kW-class microturbine runs around 1116 K).",
+                    "Or switch the Burner's spec mode to 'Fuel ṁ' and set a fuel mass flow.",
+                ],
+            )
         burner_kwargs["outlet_temperature"] = _q(bp["outlet_temperature"])
     if "fuel_lhv" in bp:
         burner_kwargs["fuel_lhv"] = _q(bp["fuel_lhv"])
@@ -751,6 +871,44 @@ def _classify_failure(exc: BaseException) -> Dict[str, Any]:
             ],
         }
 
+    # U7: degenerate Burner specification bag (fuel-mass-flow mode with no
+    # / zero / NaN fuel value, or outlet-T mode with no TIT). Typed by the
+    # spec builder; always a user-input problem, never a traceback.
+    if isinstance(exc, BurnerSpecInvalid):
+        return {
+            "kind": "design",
+            "title": "Burner specification is incomplete",
+            "plain_english": (
+                "The Burner's parameters don't pin one side of the energy "
+                f"balance, so the solver has nothing to solve for. {msg}"
+            ),
+            "suggestions": exc.suggestions,
+        }
+
+    # U7: burner exit temperature above the uncooled material limit. In
+    # fuel-mass-flow mode the TIT is back-derived from ṁ_fuel, so the fix
+    # is to reduce the fuel flow; in outlet-temperature mode, lower the
+    # TIT directly. Match on the stable cause code so the message stays
+    # specific even though the generic RegimeOutOfValidity branch below
+    # would also catch it.
+    if getattr(exc, "code", "") == "T_BURNER_OUT_OF_VALIDITY":
+        return {
+            "kind": "design",
+            "title": "Burner exit temperature exceeds the material limit",
+            "plain_english": (
+                "The burner outlet (turbine inlet) temperature came out "
+                "above 2100 K — the uncooled hot-section material limit "
+                "(SPEC_SHEET §13). The solver refuses rather than "
+                "extrapolating past the validated envelope."
+            ),
+            "suggestions": [
+                "If the Burner is in fuel-mass-flow mode, reduce the fuel mass flow — the derived TIT scales with the fuel-to-air ratio.",
+                "If the Burner is in outlet-temperature mode, lower the target TIT below 2100 K.",
+                "Increase the air mass flow at the inlet so the same fuel heats more air to a lower temperature.",
+            ],
+            "details": msg,
+        }
+
     # Negative / zero / NaN boundary conditions (raised by Port / cycle BC).
     if (
         ("non-positive" in msg_lc)
@@ -1065,6 +1223,29 @@ def _cycle_worker(project_id: str):
                 }
             )
 
+        # U7: the Burner carries no shaft work, so the loop above never
+        # emits a row for it — but its outlet temperature IS the TIT, and
+        # in fuel-mass-flow mode that value is back-derived (the user never
+        # typed it). Surface the burner row so the canvas chip and the
+        # result panel can show the derived TIT.
+        burner_port = result.ports.get(spec.burner.name)
+        if burner_port is not None and spec.burner.name not in result.shaft_work_components:
+            components_list.append(
+                {
+                    "componentId": spec.burner.name,
+                    "shaftWork": 0.0,
+                    "outletTemperature": float(
+                        burner_port.temperature_total.to("K").magnitude
+                    ),
+                    "outletPressure": float(
+                        burner_port.pressure_total.to("kPa").magnitude
+                    ),
+                    "outletMassFlow": float(
+                        burner_port.mass_flow.to("kg/s").magnitude
+                    ),
+                }
+            )
+
         # W-03 / AC3: build the per-component efficiency metadata so callers
         # can see (a) the converged η actually used, and (b) which efficiency
         # mode was active for each component.  The `efficiency_modes` dict
@@ -1158,12 +1339,75 @@ def _check_air_standard_live_meanline_conflict(project: Dict[str, Any]) -> None:
         )
 
 
+def _check_burner_fuel_mode_air_standard_conflict(project: Dict[str, Any]) -> None:
+    """Raise 422 if any Burner is in fuel-mass-flow mode on a project whose
+    burners are forced to air-standard heat addition.
+
+    U7 refusal: the air-standard burner model is a heat exchanger — no
+    combustion, no fuel stream — so a pinned ṁ_fuel has no physical
+    meaning there, and the core Burner would raise a constructor error
+    mid-worker (classified as a software bug with a traceback — the wrong
+    message for a user-input problem). Mirror the live-meanline conflict
+    above: refuse synchronously, before a job is created.
+
+    Air-standard is forced by any of the three sources used by
+    ``_build_recuperated_spec`` (same priority order):
+      1. project-level ``settings.air_standard`` (the public F1 flag),
+      2. per-burner ``params.air_standard`` (the sCO2 seed's heater),
+      3. a pure-fluid working medium (``boundary_conditions.composition``
+         other than air — closed loops have no combustion).
+    """
+    settings = project.get("settings", {})
+    project_air_standard = bool(settings.get("air_standard", False))
+    composition_kind = str(
+        project.get("boundary_conditions", {}).get("composition", "air")
+    )
+    is_pure_fluid = composition_kind != "air"
+
+    for comp in project.get("components", []) or []:
+        if comp.get("kind") != "Burner":
+            continue
+        bp = comp.get("params", {}) or {}
+        if _resolve_burner_spec_mode(bp) != "fuel_mass_flow":
+            continue
+        forced_by = [
+            source
+            for source, active in (
+                ("settings.air_standard", project_air_standard),
+                ("burner.params.air_standard", bool(bp.get("air_standard", False))),
+                (f"pure-fluid working medium ({composition_kind})", is_pure_fluid),
+            )
+            if active
+        ]
+        if forced_by:
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "error_code": "FUEL_MODE_REQUIRES_COMBUSTION",
+                    "message": (
+                        "Fuel mass-flow mode requires a combustion working "
+                        "fluid. This project runs its burner as an "
+                        "air-standard / pure-fluid heat exchanger (forced by: "
+                        + ", ".join(forced_by)
+                        + "), so there is no fuel stream to pin. Switch the "
+                        "Burner's spec mode back to 'Outlet T (TIT)', or use "
+                        "an open-air combustion working fluid."
+                    ),
+                    "component": comp.get("name", comp.get("id", "?")),
+                    "forced_by": forced_by,
+                },
+            )
+
+
 @router.post("/solve", response_model=JobAcceptedResponse)
 async def solve_cycle_endpoint(project_id: str) -> JobAcceptedResponse:
     project = get_project_or_404(project_id)
     # C-1 refusal: air_standard + live_meanline is thermodynamically inconsistent.
     # Check synchronously so the caller receives 422 before a job is queued.
     _check_air_standard_live_meanline_conflict(project)
+    # U7 refusal: fuel-mass-flow mode needs a real fuel stream — refuse
+    # synchronously on air-standard / pure-fluid projects.
+    _check_burner_fuel_mode_air_standard_conflict(project)
     job = register_job(project_id, "cycle")
     # Emit a queued event so the SSE stream has something on subscribe.
     publish_event(
