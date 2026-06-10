@@ -68,52 +68,58 @@ export function LeftRail() {
         railCollapsed ? "w-rail-collapsed" : "w-rail",
       )}
     >
-      <nav className="flex h-full flex-col px-2 py-3">
-        {/* Global nav (always visible) */}
-        <div className="flex flex-col gap-1">
-          {globalNav.map((item) => (
-            <RailLink
-              key={item.label}
-              item={item}
-              collapsed={railCollapsed}
-              active={
-                pathname === item.href() ||
-                (item.href() !== "/" && pathname?.startsWith(item.href()))
-              }
-            />
-          ))}
+      <nav className="flex h-full min-h-0 flex-col px-2 py-3">
+        {/* Scrollable nav region — a plain block wrapper so the links keep
+            their natural height on short viewports and the rail scrolls
+            instead of squashing its flex children. */}
+        <div className="min-h-0 flex-1 overflow-y-auto scrollbar-subtle">
+          {/* Global nav (always visible) */}
+          <div className="flex flex-col gap-1">
+            {globalNav.map((item) => (
+              <RailLink
+                key={item.label}
+                item={item}
+                collapsed={railCollapsed}
+                active={
+                  pathname === item.href() ||
+                  (item.href() !== "/" && pathname?.startsWith(item.href()))
+                }
+              />
+            ))}
+          </div>
+
+          {/* Project nav (only when inside a project) */}
+          {inProject && (
+            <>
+              <div className="my-2 h-px bg-border-subtle" />
+              <div
+                className={cn(
+                  "mb-1 px-2 text-xs font-medium uppercase tracking-wide text-text-muted",
+                  railCollapsed && "sr-only",
+                )}
+              >
+                Project
+              </div>
+              <div className="flex flex-col gap-1">
+                {projectNav.map((item) => {
+                  const href = item.href(projectId);
+                  return (
+                    <RailLink
+                      key={item.label}
+                      item={{ ...item, href: () => href }}
+                      collapsed={railCollapsed}
+                      active={pathname === href}
+                    />
+                  );
+                })}
+              </div>
+            </>
+          )}
         </div>
 
-        {/* Project nav (only when inside a project) */}
-        {inProject && (
-          <>
-            <div className="my-3 h-px bg-border-subtle" />
-            <div
-              className={cn(
-                "mb-1 px-2 text-xs font-medium uppercase tracking-wide text-text-muted",
-                railCollapsed && "sr-only",
-              )}
-            >
-              Project
-            </div>
-            <div className="flex flex-col gap-1">
-              {projectNav.map((item) => {
-                const href = item.href(projectId);
-                return (
-                  <RailLink
-                    key={item.label}
-                    item={{ ...item, href: () => href }}
-                    collapsed={railCollapsed}
-                    active={pathname === href}
-                  />
-                );
-              })}
-            </div>
-          </>
-        )}
-
-        {/* Collapse toggle pinned to the bottom */}
-        <div className="mt-auto pt-2">
+        {/* Collapse toggle pinned to the bottom, outside the scroll region
+            so it stays reachable at any viewport height. */}
+        <div className="shrink-0 pt-2">
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
