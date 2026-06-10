@@ -13,7 +13,16 @@ import {
   PerspectiveCamera,
 } from "@react-three/drei";
 import * as THREE from "three";
-import { Download, Box, Layers, Scissors, Spline, Sun, Wand2 } from "lucide-react";
+import {
+  Download,
+  Box,
+  Layers,
+  Rotate3d,
+  Scissors,
+  Spline,
+  Sun,
+  Wand2,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,
@@ -296,12 +305,22 @@ function ImpellerScene({ stream, displayMode, shading, theme, candidate }: Scene
 
   return (
     <>
-      <PerspectiveCamera makeDefault position={[0.15, 0.08, 0.2]} fov={42} />
+      {/* The wheel is centimetre-scale (r_tip ≈ 0.03 m), so the default
+          near plane (0.1 m) sits FARTHER than the closest allowed zoom —
+          the whole mesh gets near-clipped to nothing the moment the user
+          zooms inside 10 cm. Keep near ≪ minDistance − r_tip. */}
+      <PerspectiveCamera
+        makeDefault
+        position={[0.15, 0.08, 0.2]}
+        fov={42}
+        near={0.001}
+        far={10}
+      />
       <OrbitControls
         enableDamping
         dampingFactor={0.08}
         target={[0, 0, 0]}
-        minDistance={0.05}
+        minDistance={0.02}
         maxDistance={1.5}
       />
       <GizmoHelper alignment="bottom-right" margin={[60, 60]}>
@@ -551,62 +570,78 @@ function ViewerToolbar({
   meridionalAvailable,
 }: ViewerToolbarProps) {
   const meridionalActive = viewKind === "meridional" && meridionalAvailable;
+  // This toolbar lives in a side pane that can be as narrow as ~280 px
+  // regardless of viewport, so labels must not be viewport-gated and the
+  // row must never squash: the view tabs keep their labels, the secondary
+  // mode/shading toggles are icon-only (tooltips carry the labels), and
+  // each group wraps as a unit if the pane gets really tight.
   return (
-    <div className="flex items-center gap-1 border-b border-border-subtle bg-surface-subtle/30 px-2 py-1.5">
-      <ToggleGroupItem
-        label="3D"
-        icon={Box}
-        active={viewKind === "3d"}
-        onClick={() => setViewKind("3d")}
-      />
-      <ToggleGroupItem
-        label="Meridional"
-        icon={Spline}
-        active={meridionalActive}
-        onClick={() => setViewKind("meridional")}
-        disabled={!meridionalAvailable}
-      />
+    <div className="flex flex-wrap items-center gap-x-1 gap-y-1 border-b border-border-subtle bg-surface-subtle/30 px-2 py-1.5">
+      <div className="flex shrink-0 items-center gap-0.5" role="group" aria-label="View">
+        <ToggleGroupItem
+          label="3D"
+          icon={Rotate3d}
+          active={viewKind === "3d"}
+          onClick={() => setViewKind("3d")}
+        />
+        <ToggleGroupItem
+          label="Meridional"
+          icon={Spline}
+          active={meridionalActive}
+          onClick={() => setViewKind("meridional")}
+          disabled={!meridionalAvailable}
+        />
+      </div>
 
-      <span className="mx-1 h-4 w-px bg-border-subtle" aria-hidden />
+      <span className="mx-0.5 h-4 w-px shrink-0 bg-border-subtle" aria-hidden />
 
-      <ToggleGroupItem
-        label="Solid"
-        icon={Box}
-        active={displayMode === "solid"}
-        onClick={() => setDisplayMode("solid")}
-        disabled={meridionalActive}
-      />
-      <ToggleGroupItem
-        label="Wireframe"
-        icon={Layers}
-        active={displayMode === "wireframe"}
-        onClick={() => setDisplayMode("wireframe")}
-        disabled={meridionalActive}
-      />
-      <ToggleGroupItem
-        label="Section"
-        icon={Scissors}
-        active={displayMode === "section"}
-        onClick={() => setDisplayMode("section")}
-        disabled={meridionalActive}
-      />
+      <div className="flex shrink-0 items-center gap-0.5" role="group" aria-label="Display mode">
+        <ToggleGroupItem
+          label="Solid"
+          icon={Box}
+          iconOnly
+          active={displayMode === "solid"}
+          onClick={() => setDisplayMode("solid")}
+          disabled={meridionalActive}
+        />
+        <ToggleGroupItem
+          label="Wireframe"
+          icon={Layers}
+          iconOnly
+          active={displayMode === "wireframe"}
+          onClick={() => setDisplayMode("wireframe")}
+          disabled={meridionalActive}
+        />
+        <ToggleGroupItem
+          label="Section"
+          icon={Scissors}
+          iconOnly
+          active={displayMode === "section"}
+          onClick={() => setDisplayMode("section")}
+          disabled={meridionalActive}
+        />
+      </div>
 
-      <span className="mx-1 h-4 w-px bg-border-subtle" aria-hidden />
+      <span className="mx-0.5 h-4 w-px shrink-0 bg-border-subtle" aria-hidden />
 
-      <ToggleGroupItem
-        label="Photoreal"
-        icon={Sun}
-        active={shading === "photoreal"}
-        onClick={() => setShading("photoreal")}
-        disabled={meridionalActive}
-      />
-      <ToggleGroupItem
-        label="Line drawing"
-        icon={Wand2}
-        active={shading === "linedrawing"}
-        onClick={() => setShading("linedrawing")}
-        disabled={meridionalActive}
-      />
+      <div className="flex shrink-0 items-center gap-0.5" role="group" aria-label="Shading">
+        <ToggleGroupItem
+          label="Photoreal"
+          icon={Sun}
+          iconOnly
+          active={shading === "photoreal"}
+          onClick={() => setShading("photoreal")}
+          disabled={meridionalActive}
+        />
+        <ToggleGroupItem
+          label="Line drawing"
+          icon={Wand2}
+          iconOnly
+          active={shading === "linedrawing"}
+          onClick={() => setShading("linedrawing")}
+          disabled={meridionalActive}
+        />
+      </div>
     </div>
   );
 }
@@ -617,12 +652,15 @@ function ToggleGroupItem({
   active,
   onClick,
   disabled = false,
+  iconOnly = false,
 }: {
   label: string;
   icon: React.ComponentType<{ className?: string }>;
   active: boolean;
   onClick: () => void;
   disabled?: boolean;
+  /** Render icon only; the tooltip and aria-label still carry the name. */
+  iconOnly?: boolean;
 }) {
   return (
     <Tooltip>
@@ -634,15 +672,15 @@ function ToggleGroupItem({
           aria-pressed={active}
           aria-label={label}
           className={cn(
-            "inline-flex h-6 items-center gap-1 rounded-sm px-1.5 text-xs",
+            "inline-flex h-6 shrink-0 items-center gap-1 whitespace-nowrap rounded-sm px-1.5 text-xs",
             active
               ? "bg-brand-surface text-brand-text"
               : "text-text-muted hover:bg-surface-subtle hover:text-text",
             disabled && "cursor-not-allowed opacity-40 hover:bg-transparent",
           )}
         >
-          <Icon className="h-3 w-3" />
-          <span className="hidden md:inline">{label}</span>
+          <Icon className="h-3 w-3 shrink-0" />
+          {!iconOnly && <span>{label}</span>}
         </button>
       </TooltipTrigger>
       <TooltipContent>{label}</TooltipContent>
