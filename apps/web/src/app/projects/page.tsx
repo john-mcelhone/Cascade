@@ -82,33 +82,39 @@ function ProjectCard({ project }: { project: Project }) {
   return (
     <Link
       href={`/projects/${project.id}`}
-      className="group block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+      className="group block rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
     >
-      <Card className="flex h-full flex-col gap-3 p-4 transition-all duration-medium ease-out group-hover:-translate-y-0.5 group-hover:border-border-default group-hover:shadow-z3">
-        <div className="flex items-start justify-between gap-2">
-          <h2 className="text-md font-semibold leading-tight tracking-tight text-text">
-            {project.name}
-          </h2>
+      <Card className="flex h-full flex-col overflow-hidden transition-colors duration-fast group-hover:border-border-strong">
+        {/* Panel header strip — mono ID + status chip */}
+        <div className="flex items-center justify-between gap-2 border-b border-border-subtle bg-surface-subtle px-3 py-1.5">
+          <span className="truncate font-mono text-[10px] text-text-muted">
+            {project.id}
+          </span>
           <Badge variant={statusVariant}>{status}</Badge>
         </div>
 
-        <p className="line-clamp-2 text-sm leading-relaxed text-text-muted">
-          {project.description}
-        </p>
+        <div className="flex flex-1 flex-col gap-2 p-3">
+          <h2 className="text-md font-semibold leading-tight tracking-tight text-text group-hover:text-brand-text">
+            {project.name}
+          </h2>
+          <p className="line-clamp-2 text-sm leading-relaxed text-text-muted">
+            {project.description}
+          </p>
 
-        <div className="mt-auto flex items-end justify-between gap-3 border-t border-border-subtle pt-3">
-          <div>
-            <div className="text-xs text-text-muted">{project.headline.label}</div>
-            <div className="font-mono text-lg font-medium tabular-nums">
-              {fmtNumber(project.headline.value, { decimals: 3 })}
-              {project.headline.unit && (
-                <span className="ml-1 text-sm text-text-muted">
-                  {project.headline.unit}
-                </span>
-              )}
+          <div className="mt-auto flex items-end justify-between gap-3 border-t border-border-subtle pt-2.5">
+            <div>
+              <div className="micro-label">{project.headline.label}</div>
+              <div className="font-mono text-lg font-medium tabular-nums text-brand-text">
+                {fmtNumber(project.headline.value, { decimals: 3 })}
+                {project.headline.unit && (
+                  <span className="ml-1 text-sm text-text-muted">
+                    {project.headline.unit}
+                  </span>
+                )}
+              </div>
             </div>
+            <Sparkline values={project.sparkline} />
           </div>
-          <Sparkline values={project.sparkline} />
         </div>
       </Card>
     </Link>

@@ -3,7 +3,8 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
 const badgeVariants = cva(
-  "inline-flex items-center gap-1 rounded-sm border px-1.5 py-px text-xs font-medium tabular-nums",
+  // Square status chips — uppercase letterspaced caps, terminal-style.
+  "inline-flex items-center gap-1 rounded-sm border px-1.5 py-px text-[10px] font-semibold uppercase tracking-caps tabular-nums",
   {
     variants: {
       variant: {

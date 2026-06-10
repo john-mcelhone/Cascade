@@ -40,7 +40,8 @@ export function CoachMark({
   return (
     <div
       className={cn(
-        "animate-fade-in-up relative flex gap-3 rounded-lg border border-brand/25 bg-brand-surface/50 p-3 pr-9 text-sm",
+        // Advisory note — flat brand-surface panel with a 2px brand rail.
+        "animate-fade-in-up relative flex gap-3 rounded-sm border border-brand/30 border-l-2 border-l-brand bg-brand-surface/50 p-3 pr-9 text-sm",
         className,
       )}
       role="note"

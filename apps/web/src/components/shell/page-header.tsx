@@ -10,8 +10,9 @@ interface PageHeaderProps {
 }
 
 /**
- * Standard page header — breadcrumb on top, title + actions row, optional
- * description. Pages snap to this 4px-grid spacing.
+ * Standard page header — a dense instrument strip: locator breadcrumb on
+ * top, title + actions row, optional one-line description. Snaps to the
+ * 4px grid.
  */
 export function PageHeader({
   breadcrumb,
@@ -23,22 +24,24 @@ export function PageHeader({
   return (
     <div
       className={cn(
-        "flex flex-col gap-2 border-b border-border-subtle bg-surface px-5 py-4",
+        "flex flex-col gap-1.5 border-b border-border-subtle bg-surface px-5 py-3",
         className,
       )}
     >
       {breadcrumb && breadcrumb.length > 0 && <Breadcrumb items={breadcrumb} />}
       <div className="flex items-start justify-between gap-3">
-        <div className="flex flex-col gap-1">
-          <h1 className="text-lg font-semibold leading-tight tracking-tight text-text">
+        <div className="flex min-w-0 flex-col gap-0.5">
+          <h1 className="truncate text-md font-semibold leading-tight tracking-tight text-text">
             {title}
           </h1>
           {description && (
-            <p className="max-w-2xl text-sm text-text-muted">{description}</p>
+            <p className="max-w-2xl text-xs leading-relaxed text-text-muted">
+              {description}
+            </p>
           )}
         </div>
         {actions && (
-          <div className="flex items-center gap-2 shrink-0">{actions}</div>
+          <div className="flex shrink-0 items-center gap-2">{actions}</div>
         )}
       </div>
     </div>

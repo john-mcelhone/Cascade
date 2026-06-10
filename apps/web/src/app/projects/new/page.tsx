@@ -105,23 +105,23 @@ export default function NewProjectPage() {
                     setPicked(t);
                   }
                 }}
-                className={`relative cursor-pointer p-4 transition-all duration-medium ease-out hover:-translate-y-0.5 hover:shadow-z2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus ${
+                className={`relative cursor-pointer p-4 transition-colors duration-fast focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus ${
                   active
-                    ? "border-brand bg-brand-surface/40 ring-1 ring-brand"
-                    : "hover:border-border-default"
+                    ? "border-brand bg-brand-surface/40"
+                    : "hover:border-border-strong"
                 }`}
               >
                 {active && (
-                  <span className="absolute right-3 top-3 flex h-5 w-5 items-center justify-center rounded-full bg-brand text-text-inverse">
+                  <span className="absolute right-3 top-3 flex h-5 w-5 items-center justify-center rounded-sm bg-brand text-text-inverse">
                     <Check className="h-3 w-3" />
                   </span>
                 )}
                 <div className="flex items-start gap-3">
                   <div
-                    className={`flex h-9 w-9 items-center justify-center rounded-lg transition-colors ${
+                    className={`flex h-8 w-8 items-center justify-center rounded-sm border transition-colors ${
                       active
-                        ? "bg-brand-gradient text-text-inverse shadow-z1"
-                        : "border border-border-subtle bg-surface-subtle text-text-subtle"
+                        ? "border-brand/40 bg-brand text-text-inverse"
+                        : "border-border-subtle bg-surface-subtle text-text-subtle"
                     }`}
                   >
                     <t.Icon className="h-4 w-4" />

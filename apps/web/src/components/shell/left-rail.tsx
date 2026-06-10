@@ -31,18 +31,20 @@ interface NavItem {
   href: (projectId?: string) => string;
   label: string;
   Icon: LucideIcon;
+  /** Two-digit module index, rendered as a faint mono locator. */
+  index?: string;
   /** Requires a project context to render. */
   requiresProject?: boolean;
 }
 
 const projectNav: NavItem[] = [
-  { label: "Cycle", Icon: Network, href: (id) => `/projects/${id}/cycle`, requiresProject: true },
-  { label: "Flow path", Icon: Wind, href: (id) => `/projects/${id}/flowpath`, requiresProject: true },
-  { label: "Analysis", Icon: Activity, href: (id) => `/projects/${id}/analysis`, requiresProject: true },
-  { label: "Map", Icon: Grid3x3, href: (id) => `/projects/${id}/map`, requiresProject: true },
-  { label: "Rotor", Icon: Cog, href: (id) => `/projects/${id}/rotor`, requiresProject: true },
-  { label: "Runs", Icon: ListOrdered, href: (id) => `/projects/${id}/runs`, requiresProject: true },
-  { label: "Settings", Icon: Settings, href: (id) => `/projects/${id}/settings`, requiresProject: true },
+  { label: "Cycle", Icon: Network, index: "01", href: (id) => `/projects/${id}/cycle`, requiresProject: true },
+  { label: "Flow path", Icon: Wind, index: "02", href: (id) => `/projects/${id}/flowpath`, requiresProject: true },
+  { label: "Analysis", Icon: Activity, index: "03", href: (id) => `/projects/${id}/analysis`, requiresProject: true },
+  { label: "Map", Icon: Grid3x3, index: "04", href: (id) => `/projects/${id}/map`, requiresProject: true },
+  { label: "Rotor", Icon: Cog, index: "05", href: (id) => `/projects/${id}/rotor`, requiresProject: true },
+  { label: "Runs", Icon: ListOrdered, index: "06", href: (id) => `/projects/${id}/runs`, requiresProject: true },
+  { label: "Settings", Icon: Settings, index: "07", href: (id) => `/projects/${id}/settings`, requiresProject: true },
 ];
 
 const globalNav: NavItem[] = [
@@ -73,8 +75,16 @@ export function LeftRail() {
             their natural height on short viewports and the rail scrolls
             instead of squashing its flex children. */}
         <div className="min-h-0 flex-1 overflow-y-auto scrollbar-subtle">
+          <div
+            className={cn(
+              "micro-label mb-1.5 px-2",
+              railCollapsed && "sr-only",
+            )}
+          >
+            Workspace
+          </div>
           {/* Global nav (always visible) */}
-          <div className="flex flex-col gap-1">
+          <div className="flex flex-col gap-0.5">
             {globalNav.map((item) => (
               <RailLink
                 key={item.label}
@@ -91,16 +101,16 @@ export function LeftRail() {
           {/* Project nav (only when inside a project) */}
           {inProject && (
             <>
-              <div className="my-2 h-px bg-border-subtle" />
+              <div className="my-2.5 h-px bg-border-subtle" />
               <div
                 className={cn(
-                  "mb-1 px-2 text-xs font-medium uppercase tracking-wide text-text-muted",
+                  "micro-label mb-1.5 px-2",
                   railCollapsed && "sr-only",
                 )}
               >
-                Project
+                Modules
               </div>
-              <div className="flex flex-col gap-1">
+              <div className="flex flex-col gap-0.5">
                 {projectNav.map((item) => {
                   const href = item.href(projectId);
                   return (
@@ -135,7 +145,7 @@ export function LeftRail() {
                   <PanelLeftClose className="h-4 w-4" />
                 )}
                 {!railCollapsed && (
-                  <span className="text-sm">Collapse</span>
+                  <span className="text-xs">Collapse</span>
                 )}
               </Button>
             </TooltipTrigger>
@@ -158,26 +168,26 @@ function RailLink({
   collapsed: boolean;
   active: boolean;
 }) {
-  const { Icon, label } = item;
+  const { Icon, label, index } = item;
   const link = (
     <Link
       href={item.href()}
       aria-current={active ? "page" : undefined}
       className={cn(
-        "group relative flex h-8 items-center gap-2.5 rounded-md px-2.5 text-sm transition-all duration-fast",
+        "group relative flex h-7 items-center gap-2.5 rounded-sm px-2.5 text-sm transition-colors duration-fast",
         active
           ? "bg-brand-surface font-medium text-brand-text"
           : "text-text-muted hover:bg-surface-subtle hover:text-text",
         collapsed && "justify-center px-0",
       )}
     >
-      {/* Active accent bar */}
+      {/* Active accent bar — full height, machined */}
       <span
         aria-hidden
         className={cn(
-          "absolute left-0 top-1/2 h-4 w-0.5 -translate-y-1/2 rounded-full bg-brand transition-all duration-base",
+          "absolute left-0 top-0 h-full w-0.5 bg-brand transition-opacity duration-base",
           active ? "opacity-100" : "opacity-0",
-          collapsed && "left-1",
+          collapsed && "left-0.5",
         )}
       />
       <Icon
@@ -186,7 +196,22 @@ function RailLink({
           active ? "text-brand" : "text-text-muted group-hover:text-text",
         )}
       />
-      {!collapsed && <span className="truncate">{label}</span>}
+      {!collapsed && (
+        <>
+          <span className="flex-1 truncate">{label}</span>
+          {index && (
+            <span
+              aria-hidden
+              className={cn(
+                "font-mono text-[10px]",
+                active ? "text-brand-text/70" : "text-text-disabled",
+              )}
+            >
+              {index}
+            </span>
+          )}
+        </>
+      )}
     </Link>
   );
 

@@ -33,7 +33,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <ThemeProvider
       attribute="data-theme"
-      defaultTheme="system"
+      // Console (dark) is the product's default identity; light is the
+      // "blueprint paper" companion, and System remains available.
+      defaultTheme="dark"
       enableSystem
       disableTransitionOnChange
     >

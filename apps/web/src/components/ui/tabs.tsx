@@ -30,7 +30,8 @@ const TabsTrigger = React.forwardRef<
     className={cn(
       "inline-flex h-6 items-center justify-center whitespace-nowrap rounded-sm px-2 text-sm font-medium",
       "transition-colors duration-fast",
-      "data-[state=active]:bg-surface-raised data-[state=active]:text-text data-[state=active]:shadow-z1",
+      // Active tab: raised fill plus a 2px brand underline — instrument-style.
+      "data-[state=active]:bg-surface-raised data-[state=active]:text-text data-[state=active]:shadow-[inset_0_-2px_0_rgb(var(--brand-default))]",
       "hover:text-text",
       "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus",
       "disabled:pointer-events-none disabled:opacity-50",
