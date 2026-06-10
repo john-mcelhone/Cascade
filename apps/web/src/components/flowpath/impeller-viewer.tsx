@@ -316,7 +316,12 @@ function ImpellerScene({ stream, displayMode, shading, theme, candidate }: Scene
         near={0.001}
         far={10}
       />
+      {/* makeDefault registers the controls in R3F state — GizmoHelper
+          requires it: clicking a gizmo axis runs `'getTarget' in controls`
+          / `'minPolarAngle' in controls` on `state.controls`, which throws
+          a TypeError when no default controls are registered (null). */}
       <OrbitControls
+        makeDefault
         enableDamping
         dampingFactor={0.08}
         target={[0, 0, 0]}
