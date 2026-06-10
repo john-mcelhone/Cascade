@@ -145,6 +145,12 @@ const config: Config = {
       spacing: {
         // 8-step scale from tokens.json space.*
         // Tailwind defaults stay available; these are our semantic names.
+        // NOTE: this scale is for gaps/padding/margins only. Keys 5-8
+        // diverge from Tailwind's defaults (24/32/48/64 vs 20/24/28/32),
+        // and height/width derive from spacing — so the matching keys are
+        // pinned back to Tailwind's defaults under `width`/`height` below.
+        // Without that, every h-7 control renders 48px instead of the
+        // design system's documented 28px dense height.
         "1": "4px",
         "2": "8px",
         "3": "12px",
@@ -185,14 +191,25 @@ const config: Config = {
         in: "cubic-bezier(0.4, 0, 1, 1)",
       },
 
-      // Layout shell sizes
+      // Layout shell sizes — plus Tailwind's default sizing steps for the
+      // keys the spacing token scale above would otherwise hijack. Control
+      // dimensions (h-5…h-8, w-5…w-8) must follow Tailwind's 4px grid:
+      // h-6 = 24px dense rows, h-7 = 28px buttons/inputs, h-8 = 32px nav.
       width: {
         rail: "240px",
         "rail-collapsed": "64px",
+        "5": "1.25rem",
+        "6": "1.5rem",
+        "7": "1.75rem",
+        "8": "2rem",
       },
       height: {
         topbar: "44px",
         bottombar: "32px",
+        "5": "1.25rem",
+        "6": "1.5rem",
+        "7": "1.75rem",
+        "8": "2rem",
       },
 
       // 8 px dotted canvas background (Cycle Canvas)
