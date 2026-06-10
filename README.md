@@ -190,7 +190,6 @@ Run `make ci` before opening a PR — it is the same gate the maintainers use.
 - [VALIDATION_REPORT.md](VALIDATION_REPORT.md) — pass-gates, characterizations, and gaps, case by case.
 - [KNOWN_GAPS.md](KNOWN_GAPS.md) — every known gap, with stable KG-IDs.
 - [ROADMAP.md](ROADMAP.md) — where Cascade serves today and what lands next.
-- [Competitive landscape](docs/research/competitive-landscape.md) — the market survey behind the project's positioning.
 
 ## License & status
 
