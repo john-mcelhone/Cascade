@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useParams, usePathname } from "next/navigation";
-import { Search, ChevronRight } from "lucide-react";
+import { Search } from "lucide-react";
 import { Logo } from "./logo";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { ExperienceSwitcher } from "./experience-switcher";
@@ -11,8 +11,9 @@ import { useUIStore } from "@/lib/stores/ui-store";
 import { useProject } from "@/lib/api/hooks";
 
 /**
- * Top bar — 44 px tall.
- * Layout: [Logo] · [project crumb (if in /projects/[id]/...)] · [⌘K] · [Theme] · [User]
+ * Top bar — 40 px command bar.
+ * Layout: [Logo] / [context path] · [⌘K command field] · [Experience] · [Theme] · [User]
+ * The context path reads like a console locator: PROJECTS / <NAME>.
  */
 export function TopBar() {
   const params = useParams<{ id?: string }>();
@@ -21,23 +22,30 @@ export function TopBar() {
   const projectId = params?.id;
 
   return (
-    <header className="glass sticky top-0 z-40 flex h-topbar shrink-0 items-center gap-2.5 border-b border-border-subtle px-3">
+    <header className="sticky top-0 z-40 flex h-topbar shrink-0 items-center gap-3 border-b border-border-subtle bg-surface px-3">
       <Link
         href="/"
-        className="rounded-md px-1 py-0.5 -mx-1 transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+        className="rounded-sm px-1 py-0.5 -mx-1 transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
       >
         <Logo />
       </Link>
 
       {projectId ? (
         <>
-          <ChevronRight className="h-3 w-3 text-text-muted/50" />
+          <PathDivider />
+          <Link
+            href="/projects"
+            className="micro-label transition-colors hover:text-text"
+          >
+            Projects
+          </Link>
+          <PathDivider />
           <ProjectCrumb id={projectId} />
         </>
       ) : pathname?.startsWith("/projects") ? (
         <>
-          <ChevronRight className="h-3 w-3 text-text-muted/50" />
-          <span className="text-sm text-text-muted">Projects</span>
+          <PathDivider />
+          <span className="micro-label text-text-subtle">Projects</span>
         </>
       ) : null}
 
@@ -46,20 +54,30 @@ export function TopBar() {
           type="button"
           onClick={() => setPaletteOpen(true)}
           aria-label="Search and run commands"
-          className="group flex h-7 items-center gap-2 rounded-md border border-border-subtle bg-surface-subtle/60 pl-2 pr-1.5 text-text-muted transition-colors hover:border-border-default hover:bg-surface-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+          className="group flex h-7 w-56 items-center gap-2 rounded-sm border border-border-subtle bg-surface-subtle pl-2 pr-1.5 text-text-muted transition-colors hover:border-border-default hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus max-sm:w-auto"
         >
-          <Search className="h-3.5 w-3.5" />
-          <span className="hidden text-xs sm:inline">Search or jump to…</span>
-          <kbd className="hidden rounded border border-border-subtle bg-surface px-1 font-mono text-[10px] sm:inline-block">
+          <Search className="h-3.5 w-3.5 shrink-0" />
+          <span className="hidden flex-1 text-left text-xs sm:inline">
+            Jump or run a command
+          </span>
+          <kbd className="hidden rounded-sm border border-border-subtle bg-surface px-1 font-mono text-[10px] text-text-muted sm:inline-block">
             ⌘K
           </kbd>
         </button>
         <ExperienceSwitcher />
-        <div className="mx-0.5 hidden h-5 w-px bg-border-subtle sm:block" />
+        <div className="mx-0.5 hidden h-4 w-px bg-border-subtle sm:block" />
         <ThemeToggle />
         <UserMenu />
       </div>
     </header>
+  );
+}
+
+function PathDivider() {
+  return (
+    <span aria-hidden className="select-none text-xs text-border-strong">
+      /
+    </span>
   );
 }
 
@@ -69,7 +87,7 @@ function ProjectCrumb({ id }: { id: string }) {
   return (
     <Link
       href={`/projects/${id}`}
-      className="text-sm font-medium text-text hover:underline underline-offset-4"
+      className="micro-label !text-text transition-colors hover:!text-brand-text"
     >
       {isLoading ? "…" : data?.name ?? id}
     </Link>

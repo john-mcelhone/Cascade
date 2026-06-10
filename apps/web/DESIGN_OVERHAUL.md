@@ -1,85 +1,97 @@
-# Cascade — Design, UI & UX Overhaul (v0.2)
+# Cascade — Design, UI & UX Overhaul (v0.3 "Console")
 
 A collaboration brief, executed: a product designer and an interaction designer
-sit down with Cascade and ask one question — *how does the same tool delight an
-absolute beginner who has never sized a turbine, and a veteran who wants to be
-sweeping geometries in four minutes?* This overhaul is the answer.
+sit down with Cascade and ask one question — *what should a professional
+engineering instrument look like in a browser, and how does the same surface
+still welcome someone who has never sized a turbine?* This overhaul is the
+answer.
 
-## The central idea: one Experience dial
+## The design language: instrument-grade density
 
-Most engineering tools pick a side — either they're dense and intimidating
-(pro-only) or they're padded and slow (beginner-only). Cascade now adapts along
-a single axis, set from the top bar and remembered across sessions:
+The previous pass (v0.2) borrowed from consumer software — aurora washes,
+glass blur, gradient buttons, big radii. Cascade's users stare at residuals,
+Campbell diagrams, and candidate sweeps for hours; the new language borrows
+instead from the professional-terminal lineage (trading floors, flight decks,
+mission control) without falling into the monospace-everywhere cliché:
 
-| Level | Who | What changes |
-| --- | --- | --- |
-| **Guided** | Absolute beginners | Roomy layout, plain-language coach marks, a first-run welcome with three clear front doors, next-step nudges. |
-| **Standard** | The working default | Balanced density; help on demand (tooltips); everything reachable. |
-| **Expert** | Professionals | Maximum density, keyboard-first, *no* nudges or welcome — every control on screen. |
+- **Dark-first.** The default theme is *Console* — a deep blue-black
+  (`#0A0D12`) with three layered panel values. Light mode remains as
+  *Blueprint*, a crisp cool-paper companion for daylight and print.
+- **Hairlines, not shadows.** Depth comes from layered surface values and
+  1 px borders. Elevation shadows are shallow and crisp; nothing blurs,
+  nothing glows.
+- **Machined corners.** Radii top out at 6 px; working surfaces sit at 2 px.
+- **Two accents with strict jobs.** Cyan is the *working* accent —
+  interactive, selected, primary. Amber is the *live* accent — running jobs,
+  the solver LED, attention. Green/red stay strictly semantic
+  (converged/failed), so a glance at any screen reads truthfully.
+- **Type with a division of labor.** Inter carries prose and controls; mono
+  is reserved for data — values, IDs, timestamps, keyboard hints. The
+  signature element is the **micro-label**: 10 px uppercase letterspaced
+  caps on every panel header, section eyebrow, and status segment.
 
-The level is plumbed through `useUIStore().experience` and consumed by:
+## The chrome, redesigned
 
-- `ExperienceSwitcher` (top bar) and matching commands in ⌘K.
-- `WelcomeBanner` — first-run only, never shown to Experts.
-- `CoachMark` — inline, dismissible, guided-only by default.
-- `useCoaching()` — the policy hook (`showInlineCoaching`, `roomy`, `dense`).
-
-Because the dial is one decision a user makes once, the product stops being a
-compromise and becomes two products wearing the same skin.
-
-## Visual foundation
-
-The accessible, WCAG-tuned semantic palette in `tokens.json` is **preserved**.
-What's new is an *expression* layer added on top (`globals.css` + Tailwind):
-
-- **Layered elevation** — `z1…z4` shadows now stack a contact + ambient cast
-  (the Apple/Material approach) for soft, believable depth; plus a brand
-  `shadow-glow` for primary actions.
-- **Brand gradient** — `.bg-brand-gradient` / `.text-brand-gradient` give the
-  mark, primary buttons, and hero a living teal→cyan finish.
-- **Aurora field** — `.aurora` paints a slow, low-opacity multi-stop wash
-  behind the hero and welcome surfaces.
-- **Glass chrome** — `.glass` gives the top bar, bottom bar, and command
-  palette a saturated backdrop blur that reads the content beneath.
-- **Motion vocabulary** — `fade-in-up`, `scale-in`, `pulse-ring`, `shimmer`
-  with spring-like easing, all gated by `prefers-reduced-motion`.
-- **Display type** — `text-3xl…5xl` for marketing/onboarding confidence; the
-  dense 14px workspace scale is untouched.
+- **Top bar (40 px)** — a command bar: the mark, a console-style locator
+  path (`CASCADE / PROJECTS / MICROTURBINE 30 KW`), a real ⌘K command field,
+  the experience dial, theme, account.
+- **Left rail (224 px)** — grouped under `WORKSPACE` and `MODULES`
+  micro-labels; each project module carries a two-digit mono index (`01`–`07`)
+  and a full-height cyan rail when active.
+- **Bottom bar (28 px)** — a true status ticker, segmented by hairlines:
+  solver LED (grey idle / pulsing amber running) with iteration, residual,
+  and progress in mono; build, live UTC clock, and identity on the right.
+- **Command palette** — a terminal prompt: `›` caret, mono input, selection
+  rail matching the left-rail active state, kbd-hint footer.
+- **Page headers** — dense instrument strips: locator breadcrumb, title,
+  one-line description, actions.
 
 ## Surfaces redesigned
 
-- **Logo** — a real mark: three stepping blades (a cascade of flow / a blade
-  row) in the brand gradient, paired with the wordmark.
-- **Landing page** — animated aurora hero, dual-audience "Two ways in" band
-  (Learn vs. Workspace), iconographic reason cards, and a four-step workflow
-  strip.
-- **App shell** — glass top bar with a real search field + the experience dial;
-  left rail with an active accent bar and animated icon states.
-- **Projects** — first-run welcome, lift-on-hover cards with gradient
-  sparklines, and loading **skeletons** instead of a bare "Loading…".
-- **Project home / New project** — gradient icon tiles, hover lift, selection
-  checkmarks, and guided coach marks.
-- **Command palette** — search icon, brand-tinted selection, a Preferences
-  group (theme + experience), Learn entry, and a keyboard-hint footer.
-- **Primitives** — buttons gain a gradient primary, soft glow, and a tactile
-  active press-scale; cards get `rounded-lg` + a hairline shadow; dialogs scale
-  in at `rounded-xl` with deeper elevation.
+- **Logo** — the three stepping blades now sit in a machined square frame,
+  flat brand cyan, paired with an uppercase letterspaced wordmark.
+- **Landing page** — blueprint-grid hero with a status chip (LED +
+  `V0.1.0 — VALIDATION PUBLIC`), solid-cyan headline accent, and a
+  hairline-segmented **spec readout** strip (`<200 ms`, `2 000+`, `100 %`,
+  `AGPL-3.0`); audience panels with terminal header strips; a numbered
+  `01/04` pipeline; dense mono footer.
+- **Projects** — cards became instrument panels: a header strip with the
+  mono project ID and an uppercase status chip, then name, description, and
+  a cyan mono metric readout with sparkline.
+- **Project home / New project** — module tiles with mono indices; flat
+  selection states (cyan fill + check) instead of gradient lifts.
+- **Primitives** — buttons are flat illuminated keys (solid cyan primary,
+  inverse text); badges are square uppercase status chips; active tabs get a
+  2 px brand underline; dialogs sharpen to 3 px radii over a plain scrim.
+- **Charts** — the 12-color categorical palette now has a dark-tuned
+  variant, brightened for the console background.
+
+## What was deliberately kept
+
+The UX systems from earlier passes survive unchanged — this was a reskin of
+the product's expression, not its behavior:
+
+- The **Experience dial** (Guided / Standard / Expert) and everything it
+  drives: welcome banner, coach marks (now styled as advisory panels with a
+  2 px cyan rail), `useCoaching()`.
+- The yellow **input-cell convention** (`surface-input`), retuned for dark.
+- The WCAG-tuned semantic structure of the token system: every variable name
+  in `globals.css` is preserved, so all module surfaces (cycle, flow path,
+  map, rotor) inherit the new language without per-file rework.
+- All routing, stores, solver hooks, and keyboard behavior.
+
+`tokens.json` holds the v0.1 semantic baseline; `globals.css` is canonical
+for the v0.3 visual language.
 
 ## Self-assessment
 
-Scored against the brief (beauty × ease-of-use), reviewed across both themes
-and all three experience levels, with a green production build (25/25 routes):
+Reviewed across both themes and all three experience levels, with a green
+production build (25/25 routes) and screenshot passes over landing, projects,
+project home, map, and rotor:
 
-| Dimension | Score |
+| Dimension | Notes |
 | --- | --- |
-| Visual craft (depth, color, type, motion) | 96 |
-| First-run / beginner ease | 96 |
-| Professional speed & density | 95 |
-| Coherence & consistency | 96 |
-| **Overall** | **95–96 / 100** |
-
-Honest gaps for a future pass: density adaptation is meaningful but could reach
-deeper into per-module layouts; a live screenshot regression loop wasn't
-available in this environment; and the deep solver canvases (cycle, rotor) were
-left functionally intact and inherit the new tokens rather than being
-re-laid-out.
+| Visual identity | Distinctive, professional, era-appropriate without pastiche; no glass, no gradients, no full-mono cosplay. |
+| Density | Chrome shrank (44→40 / 32→28 / 240→224 px) while gaining information: ticker segments, UTC clock, module indices. |
+| Beginner path | Guided mode, welcome banner, and coach marks intact and restyled to match. |
+| Honest gaps | The deep solver canvases inherit the language via tokens rather than bespoke layouts; a screenshot-regression loop is still manual. |

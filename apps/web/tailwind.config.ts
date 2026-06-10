@@ -22,7 +22,7 @@ const config: Config = {
         background: "rgb(var(--background) / <alpha-value>)",
         foreground: "rgb(var(--text-default) / <alpha-value>)",
 
-        // Brand teal
+        // Brand cyan — the working accent (interactive, selected)
         brand: {
           DEFAULT: "rgb(var(--brand-default) / <alpha-value>)",
           hover: "rgb(var(--brand-hover) / <alpha-value>)",
@@ -30,6 +30,14 @@ const config: Config = {
           surface: "rgb(var(--brand-surface) / <alpha-value>)",
           text: "rgb(var(--brand-text) / <alpha-value>)",
           accent: "rgb(var(--brand-accent) / <alpha-value>)",
+        },
+
+        // Instrument amber — the live accent (running jobs, attention)
+        accent: {
+          DEFAULT: "rgb(var(--accent-default) / <alpha-value>)",
+          surface: "rgb(var(--accent-surface) / <alpha-value>)",
+          border: "rgb(var(--accent-border) / <alpha-value>)",
+          text: "rgb(var(--accent-text) / <alpha-value>)",
         },
 
         // Surfaces
@@ -161,13 +169,21 @@ const config: Config = {
         "8": "64px",
       },
 
+      // Machined corners — the Console language tops out at 6px. `xl`/`2xl`
+      // are pinned so no surface accidentally reads soft.
       borderRadius: {
         none: "0",
-        sm: "4px",
-        DEFAULT: "4px",
-        md: "6px",
-        lg: "10px",
+        sm: "2px",
+        DEFAULT: "2px",
+        md: "3px",
+        lg: "4px",
+        xl: "6px",
+        "2xl": "6px",
         full: "9999px",
+      },
+
+      letterSpacing: {
+        caps: "0.08em",
       },
 
       boxShadow: {
@@ -196,16 +212,16 @@ const config: Config = {
       // dimensions (h-5…h-8, w-5…w-8) must follow Tailwind's 4px grid:
       // h-6 = 24px dense rows, h-7 = 28px buttons/inputs, h-8 = 32px nav.
       width: {
-        rail: "240px",
-        "rail-collapsed": "64px",
+        rail: "224px",
+        "rail-collapsed": "56px",
         "5": "1.25rem",
         "6": "1.5rem",
         "7": "1.75rem",
         "8": "2rem",
       },
       height: {
-        topbar: "44px",
-        bottombar: "32px",
+        topbar: "40px",
+        bottombar: "28px",
         "5": "1.25rem",
         "6": "1.5rem",
         "7": "1.75rem",
@@ -227,24 +243,23 @@ const config: Config = {
           "100%": { opacity: "1" },
         },
         "fade-in-up": {
-          "0%": { opacity: "0", transform: "translateY(8px)" },
+          "0%": { opacity: "0", transform: "translateY(4px)" },
           "100%": { opacity: "1", transform: "translateY(0)" },
         },
         "scale-in": {
-          "0%": { opacity: "0", transform: "scale(0.97)" },
+          "0%": { opacity: "0", transform: "scale(0.98)" },
           "100%": { opacity: "1", transform: "scale(1)" },
         },
-        "pulse-ring": {
-          "0%": { boxShadow: "0 0 0 0 rgb(var(--brand-default) / 0.5)" },
-          "70%": { boxShadow: "0 0 0 8px rgb(var(--brand-default) / 0)" },
-          "100%": { boxShadow: "0 0 0 0 rgb(var(--brand-default) / 0)" },
+        "led-pulse": {
+          "0%, 100%": { opacity: "1" },
+          "50%": { opacity: "0.35" },
         },
       },
       animation: {
         "fade-in": "fade-in 100ms cubic-bezier(0.4, 0, 0.2, 1)",
-        "fade-in-up": "fade-in-up 480ms cubic-bezier(0.16, 1, 0.3, 1) both",
-        "scale-in": "scale-in 200ms cubic-bezier(0.16, 1, 0.3, 1) both",
-        "pulse-ring": "pulse-ring 2s cubic-bezier(0.4, 0, 0.2, 1) infinite",
+        "fade-in-up": "fade-in-up 320ms cubic-bezier(0.16, 1, 0.3, 1) both",
+        "scale-in": "scale-in 160ms cubic-bezier(0.16, 1, 0.3, 1) both",
+        "led-pulse": "led-pulse 1.6s ease-in-out infinite",
       },
     },
   },

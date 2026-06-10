@@ -19,7 +19,6 @@ import {
   Settings,
   Sparkles,
   SlidersHorizontal,
-  Search,
   Sun,
   Wind,
   Zap,
@@ -127,11 +126,19 @@ export function CommandPalette() {
           }}
         >
           <div className="flex items-center gap-2 border-b border-border-subtle px-3">
-            <Search className="h-4 w-4 shrink-0 text-text-muted" />
+            <span
+              aria-hidden
+              className="select-none font-mono text-sm font-semibold text-brand"
+            >
+              ›
+            </span>
             <Command.Input
               placeholder="Search projects, jump to a page, or run a command…"
-              className="w-full bg-transparent py-3 text-sm outline-none placeholder:text-text-muted"
+              className="w-full bg-transparent py-2.5 font-mono text-sm outline-none placeholder:font-sans placeholder:text-text-muted"
             />
+            <kbd className="rounded-sm border border-border-subtle bg-surface-subtle px-1 font-mono text-[10px] text-text-muted">
+              esc
+            </kbd>
           </div>
           <Command.List className="max-h-80 overflow-auto scrollbar-subtle p-2">
             <Command.Empty className="px-3 py-6 text-center text-sm text-text-muted">
@@ -140,7 +147,7 @@ export function CommandPalette() {
 
             <Command.Group
               heading="Navigation"
-              className="px-1 pt-1 pb-2 text-[10px] uppercase tracking-wide text-text-muted [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1"
+              className="px-1 pt-1 pb-2 text-[10px] font-semibold uppercase tracking-caps text-text-muted [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1"
             >
               {navItems.map((item) => (
                 <PaletteItem
@@ -155,7 +162,7 @@ export function CommandPalette() {
 
             <Command.Group
               heading="Preferences"
-              className="px-1 pt-1 pb-2 text-[10px] uppercase tracking-wide text-text-muted [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1"
+              className="px-1 pt-1 pb-2 text-[10px] font-semibold uppercase tracking-caps text-text-muted [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1"
             >
               <PaletteItem
                 Icon={Sparkles}
@@ -192,7 +199,7 @@ export function CommandPalette() {
             {projects.length > 0 && (
               <Command.Group
                 heading="Projects"
-                className="px-1 pt-1 pb-2 text-[10px] uppercase tracking-wide text-text-muted [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1"
+                className="px-1 pt-1 pb-2 text-[10px] font-semibold uppercase tracking-caps text-text-muted [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1"
               >
                 {projects.map((p) => (
                   <PaletteItem
@@ -209,7 +216,7 @@ export function CommandPalette() {
             {projects.length > 0 && (
               <Command.Group
                 heading="Pages"
-                className="px-1 pt-1 pb-2 text-[10px] uppercase tracking-wide text-text-muted [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1"
+                className="px-1 pt-1 pb-2 text-[10px] font-semibold uppercase tracking-caps text-text-muted [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1"
               >
                 {projects.flatMap((p) => [
                   {
@@ -303,8 +310,13 @@ function PaletteItem({
       value={label}
       keywords={keywords}
       onSelect={onSelect}
-      className="group flex cursor-pointer items-center gap-2.5 rounded-md px-2 py-1.5 text-sm text-text outline-none transition-colors aria-selected:bg-brand-surface aria-selected:text-brand-text data-[selected=true]:bg-brand-surface data-[selected=true]:text-brand-text"
+      className="group relative flex cursor-pointer items-center gap-2.5 rounded-sm px-2 py-1.5 text-sm text-text outline-none transition-colors aria-selected:bg-brand-surface aria-selected:text-brand-text data-[selected=true]:bg-brand-surface data-[selected=true]:text-brand-text"
     >
+      {/* Selection rail — 2px brand bar, matching the left-rail active state. */}
+      <span
+        aria-hidden
+        className="absolute left-0 top-0 h-full w-0.5 bg-brand opacity-0 transition-opacity group-aria-selected:opacity-100 group-data-[selected=true]:opacity-100"
+      />
       <Icon className="h-3.5 w-3.5 text-text-muted group-aria-selected:text-brand" />
       <span className="flex-1">{label}</span>
     </Command.Item>

@@ -129,26 +129,32 @@ export default function ProjectOverviewPage({ params }: PageProps) {
             </CoachMark>
 
             <section>
-              <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-text-muted">
-                Modules
-              </h2>
+              <h2 className="micro-label mb-2.5">Modules</h2>
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
-                {MODULE_CARDS.map((m) => (
+                {MODULE_CARDS.map((m, i) => (
                   <Link
                     key={m.key}
                     href={m.href(id)}
-                    className="group block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                    className="group block rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
                   >
-                    <Card className="flex h-full items-start gap-3 p-4 transition-all duration-medium ease-out group-hover:-translate-y-0.5 group-hover:border-border-default group-hover:shadow-z3">
-                      <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand-surface text-brand transition-colors group-hover:bg-brand-gradient group-hover:text-text-inverse">
+                    <Card className="flex h-full items-start gap-3 p-3.5 transition-colors duration-fast group-hover:border-border-strong">
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-sm border border-brand/40 bg-brand-surface text-brand">
                         <m.Icon className="h-4 w-4" />
                       </div>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center justify-between gap-2">
-                          <h3 className="text-md font-semibold tracking-tight text-text">
+                          <h3 className="text-md font-semibold tracking-tight text-text group-hover:text-brand-text">
                             {m.label}
                           </h3>
-                          <ArrowUpRight className="h-4 w-4 -translate-x-1 text-brand opacity-0 transition-all group-hover:translate-x-0 group-hover:opacity-100" />
+                          <span className="flex items-center gap-1.5">
+                            <span
+                              aria-hidden
+                              className="font-mono text-[10px] text-text-disabled"
+                            >
+                              {String(i + 1).padStart(2, "0")}
+                            </span>
+                            <ArrowUpRight className="h-4 w-4 -translate-x-1 text-brand opacity-0 transition-all group-hover:translate-x-0 group-hover:opacity-100" />
+                          </span>
                         </div>
                         <p className="mt-1 text-sm leading-relaxed text-text-muted">
                           {m.blurb}
@@ -161,10 +167,8 @@ export default function ProjectOverviewPage({ params }: PageProps) {
             </section>
 
             <section>
-              <div className="mb-3 flex items-end justify-between">
-                <h2 className="text-sm font-medium uppercase tracking-wide text-text-muted">
-                  Recent runs
-                </h2>
+              <div className="mb-2.5 flex items-end justify-between">
+                <h2 className="micro-label">Recent runs</h2>
                 <Link
                   href={`/projects/${id}/runs`}
                   className="text-sm text-brand-text hover:underline underline-offset-4"
@@ -189,9 +193,7 @@ export default function ProjectOverviewPage({ params }: PageProps) {
             </section>
 
             <section>
-              <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-text-muted">
-                Quick actions
-              </h2>
+              <h2 className="micro-label mb-2.5">Quick actions</h2>
               <div className="flex flex-wrap gap-2">
                 <Link href={`/projects/${id}/cycle`}>
                   <Button>Run cycle</Button>

@@ -4,51 +4,66 @@
 
 /*
  * Cascade design tokens, expressed as CSS variables.
- * Source: /tokens.json. Light mode lives on :root; dark mode swaps on
- * [data-theme="dark"]. Color variables are R G B triplets (no commas),
- * so Tailwind's `rgb(var(--foo) / <alpha>)` notation works for every utility.
  *
- * Keep these in sync with tokens.json — that file is canonical.
+ * v0.3 "Console" design language — an instrument-grade, information-dense
+ * aesthetic in the lineage of professional terminals (think Bloomberg, flight
+ * decks, mission control) without the monospace-everywhere cliché:
  *
- * v0.2 design overhaul: the semantic palette below is preserved (WCAG-tuned),
- * with additive expression tokens — layered elevation, brand gradients,
- * aurora fields, glass surfaces, and a richer motion vocabulary — that give the
- * product an Apple-grade finish without disturbing the accessible foundation.
+ *   - Dark-first. The default theme is a deep blue-black console; light mode
+ *     is a crisp "blueprint paper" companion for daylight and print.
+ *   - Hairline panels instead of soft shadows. Depth comes from layered
+ *     surface values and 1px borders, not blur or glow.
+ *   - 2–4 px radii. Sharp, machined corners.
+ *   - Cyan is the working accent (interactive, selected); amber is the live
+ *     accent (running jobs, attention). Green/red stay strictly semantic.
+ *   - Inter for prose and controls; mono is reserved for data — values, IDs,
+ *     timestamps, keyboard hints.
+ *
+ * Color variables are R G B triplets (no commas) so Tailwind's
+ * `rgb(var(--foo) / <alpha>)` notation works for every utility.
+ *
+ * tokens.json holds the v0.1 semantic baseline; this file is canonical for
+ * the v0.3 visual language.
  */
 
 @layer base {
   :root {
-    /* App backgrounds */
-    --background: 255 255 255;            /* color.background.app.light: #FFFFFF */
+    /* App backgrounds — "blueprint paper" light theme */
+    --background: 246 247 249;             /* #F6F7F9 cool paper */
     --surface-default: 255 255 255;        /* #FFFFFF */
-    --surface-subtle: 238 239 241;         /* #EEEFF1 */
+    --surface-subtle: 236 238 241;         /* #ECEEF1 */
     --surface-raised: 255 255 255;         /* #FFFFFF */
     --surface-input: 255 252 235;          /* #FFFCEB — yellow input convention */
     --surface-computed: 247 247 248;       /* #F7F7F8 */
 
     /* Text */
-    --text-default: 26 28 33;              /* #1A1C21 */
-    --text-muted: 122 128 138;             /* #7A808A */
-    --text-subtle: 74 79 88;                /* #4A4F58 */
-    --text-disabled: 193 197 203;          /* #C1C5CB */
+    --text-default: 23 28 36;              /* #171C24 */
+    --text-muted: 110 119 132;             /* #6E7784 */
+    --text-subtle: 71 79 92;               /* #474F5C */
+    --text-disabled: 184 190 199;          /* #B8BEC7 */
     --text-inverse: 255 255 255;           /* #FFFFFF */
     --text-bound: 122 61 168;              /* #7A3DA8 — bound parameter violet */
 
     /* Borders */
-    --border-subtle: 220 222 226;          /* #DCDEE2 */
-    --border-default: 193 197 203;         /* #C1C5CB */
-    --border-strong: 122 128 138;          /* #7A808A */
-    --border-focus: 45 110 120;            /* #2D6E78 — brand teal */
+    --border-subtle: 218 222 228;          /* #DADEE4 */
+    --border-default: 186 192 201;         /* #BAC0C9 */
+    --border-strong: 110 119 132;          /* #6E7784 */
+    --border-focus: 14 116 144;            /* #0E7490 — working cyan */
 
-    /* Brand teal */
-    --brand-default: 45 110 120;           /* #2D6E78 */
-    --brand-hover: 63 139 150;             /* #3F8B96 */
-    --brand-pressed: 31 85 94;             /* #1F555E */
-    --brand-surface: 227 240 242;          /* #E3F0F2 */
-    --brand-text: 31 85 94;                /* #1F555E */
-    /* Expression: a cooler companion hue for the brand gradient. */
-    --brand-accent: 38 128 156;            /* #26809C — teal→cyan lift */
-    --brand-glow: 63 139 150;              /* halo color for primary actions */
+    /* Brand — working cyan-teal */
+    --brand-default: 14 116 144;           /* #0E7490 */
+    --brand-hover: 8 145 178;              /* #0891B2 */
+    --brand-pressed: 21 94 117;            /* #155E75 */
+    --brand-surface: 224 242 247;          /* #E0F2F7 */
+    --brand-text: 21 94 117;               /* #155E75 */
+    --brand-accent: 8 145 178;             /* companion hue (legacy alias) */
+    --brand-glow: 14 116 144;
+
+    /* Accent — instrument amber: live / running / attention */
+    --accent-default: 158 102 0;           /* #9E6600 */
+    --accent-surface: 251 240 219;         /* #FBF0DB */
+    --accent-border: 209 162 89;           /* #D1A259 */
+    --accent-text: 122 76 0;               /* #7A4C00 */
 
     /* Semantic — success */
     --success-default: 46 135 84;          /* #2E8754 */
@@ -74,7 +89,7 @@
     --info-border: 110 151 208;            /* #6E97D0 */
     --info-text: 31 69 129;                /* #1F4581 */
 
-    /* Categorical chart palette (12) */
+    /* Categorical chart palette (12) — tuned for white plot areas */
     --chart-1: 31 78 121;                  /* #1F4E79 navy */
     --chart-2: 194 91 31;                  /* #C25B1F sienna */
     --chart-3: 46 135 84;                  /* #2E8754 emerald */
@@ -88,95 +103,90 @@
     --chart-11: 72 120 181;                /* #4878B5 denim */
     --chart-12: 126 92 45;                 /* #7E5C2D bronze */
 
-    /* Elevation — layered, diffuse, daylight-soft. Two stacked shadows per
-     * level give a contact shadow plus an ambient cast (the Apple/Material
-     * approach), tuned light for white surfaces. */
-    --shadow-z1: 0 1px 2px rgba(14, 15, 18, 0.05), 0 1px 1px rgba(14, 15, 18, 0.03);
-    --shadow-z2: 0 2px 4px rgba(14, 15, 18, 0.06), 0 4px 12px rgba(14, 15, 18, 0.06);
-    --shadow-z3: 0 8px 16px rgba(14, 15, 18, 0.08), 0 16px 40px rgba(14, 15, 18, 0.12);
-    --shadow-z4: 0 16px 32px rgba(14, 15, 18, 0.10), 0 32px 64px rgba(14, 15, 18, 0.16);
-    /* A focused-element halo in brand teal. */
-    --shadow-glow: 0 0 0 1px rgb(var(--brand-default) / 0.4), 0 6px 20px rgb(var(--brand-glow) / 0.28);
-
-    /* Glass — translucent surface fills for floating chrome / overlays. */
-    --glass-fill: 255 255 255;
-    --glass-alpha: 0.72;
-    --glass-border: 255 255 255;
-    --glass-border-alpha: 0.6;
-
-    /* Aurora field — soft brand-tinted color stops for hero / canvas washes. */
-    --aurora-1: 63 139 150;                /* teal */
-    --aurora-2: 38 128 156;                /* cyan */
-    --aurora-3: 122 61 168;                /* violet */
-    --aurora-4: 46 135 84;                 /* emerald */
+    /* Elevation — crisp and shallow; hairline borders carry most depth. */
+    --shadow-z1: 0 1px 2px rgba(15, 23, 42, 0.06);
+    --shadow-z2: 0 1px 3px rgba(15, 23, 42, 0.08), 0 4px 10px rgba(15, 23, 42, 0.06);
+    --shadow-z3: 0 4px 12px rgba(15, 23, 42, 0.10), 0 12px 28px rgba(15, 23, 42, 0.10);
+    --shadow-z4: 0 8px 20px rgba(15, 23, 42, 0.12), 0 24px 48px rgba(15, 23, 42, 0.14);
+    /* Legacy alias — focused-element halo, now a flat 1px brand ring. */
+    --shadow-glow: 0 0 0 1px rgb(var(--brand-default) / 0.5);
   }
 
   :root[data-theme="dark"] {
-    --background: 26 28 33;                /* #1A1C21 */
-    --surface-default: 44 48 56;           /* #2C3038 */
-    --surface-subtle: 26 28 33;            /* #1A1C21 */
-    --surface-raised: 74 79 88;            /* #4A4F58 */
-    --surface-input: 58 51 24;             /* #3A3318 */
-    --surface-computed: 44 48 56;          /* #2C3038 */
+    /* "Console" — the default identity. Deep blue-black, layered panels. */
+    --background: 10 13 18;                /* #0A0D12 */
+    --surface-default: 17 22 31;           /* #11161F */
+    --surface-subtle: 13 17 23;            /* #0D1117 recessed wells */
+    --surface-raised: 26 34 48;            /* #1A2230 */
+    --surface-input: 42 35 14;             /* #2A230E — yellow input convention */
+    --surface-computed: 20 26 37;          /* #141A25 */
 
-    --text-default: 238 239 241;           /* #EEEFF1 */
-    --text-muted: 193 197 203;             /* #C1C5CB */
-    --text-subtle: 220 222 226;            /* #DCDEE2 */
-    --text-disabled: 122 128 138;          /* #7A808A */
-    --text-inverse: 26 28 33;              /* #1A1C21 */
-    --text-bound: 199 166 229;             /* #C7A6E5 */
+    --text-default: 232 237 244;           /* #E8EDF4 */
+    --text-muted: 148 158 174;             /* #949EAE */
+    --text-subtle: 195 203 216;            /* #C3CBD8 */
+    --text-disabled: 92 102 119;           /* #5C6677 */
+    --text-inverse: 10 13 18;              /* #0A0D12 */
+    --text-bound: 201 169 240;             /* #C9A9F0 */
 
-    --border-subtle: 74 79 88;             /* #4A4F58 */
-    --border-default: 122 128 138;         /* #7A808A */
-    --border-strong: 193 197 203;          /* #C1C5CB */
-    --border-focus: 63 139 150;            /* #3F8B96 */
+    --border-subtle: 33 42 56;             /* #212A38 */
+    --border-default: 51 63 82;            /* #333F52 */
+    --border-strong: 96 112 136;           /* #607088 */
+    --border-focus: 78 199 216;            /* #4EC7D8 */
 
-    --brand-default: 63 139 150;           /* #3F8B96 */
-    --brand-hover: 91 165 176;             /* #5BA5B0 */
-    --brand-pressed: 45 110 120;           /* #2D6E78 */
-    --brand-surface: 31 59 64;             /* #1F3B40 */
-    --brand-text: 159 207 214;             /* #9FCFD6 */
-    --brand-accent: 91 180 200;            /* #5BB4C8 */
-    --brand-glow: 91 165 176;
+    /* Brand — electric cyan against the console black */
+    --brand-default: 78 199 216;           /* #4EC7D8 */
+    --brand-hover: 116 217 231;            /* #74D9E7 */
+    --brand-pressed: 51 163 180;           /* #33A3B4 */
+    --brand-surface: 17 44 53;             /* #112C35 */
+    --brand-text: 137 222 235;             /* #89DEEB */
+    --brand-accent: 78 199 216;
+    --brand-glow: 78 199 216;
+
+    /* Accent — instrument amber */
+    --accent-default: 245 166 35;          /* #F5A623 */
+    --accent-surface: 49 36 12;            /* #31240C */
+    --accent-border: 122 90 31;            /* #7A5A1F */
+    --accent-text: 250 198 110;            /* #FAC66E */
 
     --success-default: 70 165 107;         /* #46A56B */
-    --success-surface: 27 60 40;           /* #1B3C28 */
+    --success-surface: 23 48 33;           /* #173021 */
     --success-border: 58 111 77;           /* #3A6F4D */
     --success-text: 156 210 176;           /* #9CD2B0 */
 
     --warning-default: 213 143 31;         /* #D58F1F */
-    --warning-surface: 60 46 15;           /* #3C2E0F */
+    --warning-surface: 52 40 13;           /* #34280D */
     --warning-border: 122 94 31;           /* #7A5E1F */
     --warning-text: 240 204 133;           /* #F0CC85 */
 
-    --danger-default: 209 74 69;           /* #D14A45 */
-    --danger-surface: 61 26 25;            /* #3D1A19 */
+    --danger-default: 224 82 76;           /* #E0524C */
+    --danger-surface: 53 22 21;            /* #351615 */
     --danger-border: 126 40 35;            /* #7E2823 */
-    --danger-text: 235 162 159;            /* #EBA29F */
+    --danger-text: 240 166 162;            /* #F0A6A2 */
 
-    --info-default: 74 130 209;            /* #4A82D1 */
-    --info-surface: 25 46 80;              /* #192E50 */
+    --info-default: 96 148 220;            /* #6094DC */
+    --info-surface: 21 38 66;              /* #152642 */
     --info-border: 46 79 132;              /* #2E4F84 */
-    --info-text: 166 195 236;             /* #A6C3EC */
+    --info-text: 166 195 236;              /* #A6C3EC */
 
-    /* Chart palette unchanged in dark mode (categorical hand-tuned for both). */
+    /* Chart palette — brightened for dark plot areas. */
+    --chart-1: 91 155 213;                 /* #5B9BD5 */
+    --chart-2: 232 128 76;                 /* #E8804C */
+    --chart-3: 86 194 131;                 /* #56C283 */
+    --chart-4: 176 127 224;                /* #B07FE0 */
+    --chart-5: 224 169 62;                 /* #E0A93E */
+    --chart-6: 78 205 201;                 /* #4ECDC9 */
+    --chart-7: 224 111 164;                /* #E06FA4 */
+    --chart-8: 147 163 177;                /* #93A3B1 */
+    --chart-9: 169 207 84;                 /* #A9CF54 */
+    --chart-10: 224 104 94;                /* #E0685E */
+    --chart-11: 124 166 224;               /* #7CA6E0 */
+    --chart-12: 196 154 98;                /* #C49A62 */
 
-    /* Elevation — deeper, with a hairline top highlight handled by utilities. */
-    --shadow-z1: 0 1px 2px rgba(0, 0, 0, 0.4);
-    --shadow-z2: 0 2px 6px rgba(0, 0, 0, 0.45), 0 6px 16px rgba(0, 0, 0, 0.4);
-    --shadow-z3: 0 10px 24px rgba(0, 0, 0, 0.55), 0 20px 48px rgba(0, 0, 0, 0.5);
-    --shadow-z4: 0 18px 40px rgba(0, 0, 0, 0.6), 0 36px 72px rgba(0, 0, 0, 0.55);
-    --shadow-glow: 0 0 0 1px rgb(var(--brand-default) / 0.5), 0 6px 24px rgb(var(--brand-glow) / 0.4);
-
-    --glass-fill: 36 40 47;
-    --glass-alpha: 0.72;
-    --glass-border: 255 255 255;
-    --glass-border-alpha: 0.08;
-
-    --aurora-1: 63 139 150;
-    --aurora-2: 38 128 156;
-    --aurora-3: 122 61 168;
-    --aurora-4: 46 135 84;
+    --shadow-z1: 0 1px 2px rgba(0, 0, 0, 0.5);
+    --shadow-z2: 0 2px 6px rgba(0, 0, 0, 0.5);
+    --shadow-z3: 0 6px 16px rgba(0, 0, 0, 0.55), 0 14px 32px rgba(0, 0, 0, 0.45);
+    --shadow-z4: 0 10px 24px rgba(0, 0, 0, 0.6), 0 28px 56px rgba(0, 0, 0, 0.5);
+    --shadow-glow: 0 0 0 1px rgb(var(--brand-default) / 0.55);
   }
 
   /* Body defaults */
@@ -193,7 +203,6 @@
     text-rendering: optimizeLegibility;
   }
 
-  /* Headings get optical sizing + tighter tracking for display confidence. */
   h1, h2, h3, h4 {
     font-feature-settings: "ss01", "cv11";
   }
@@ -204,17 +213,16 @@
     font-variant-numeric: tabular-nums slashed-zero;
   }
 
-  /* Selection — brand teal at 25 % opacity */
+  /* Selection — brand at 30 % */
   ::selection {
-    background-color: rgb(var(--brand-default) / 0.25);
+    background-color: rgb(var(--brand-default) / 0.3);
   }
 
-  /* Focus rings — see DESIGN_SYSTEM §9. 2 px ring with 2 px offset, plus a
-   * soft brand halo for a more refined, less harsh focus state. */
+  /* Focus rings — 2 px ring with 1 px offset; sharp corners. */
   :focus-visible {
     outline: 2px solid rgb(var(--border-focus));
-    outline-offset: 2px;
-    border-radius: 3px;
+    outline-offset: 1px;
+    border-radius: 2px;
   }
 
   /* Reduced motion: collapse most transitions per DESIGN_SYSTEM §7. */
@@ -231,58 +239,37 @@
 }
 
 @layer components {
-  /* Glass chrome — translucent, blurred floating surfaces (top bar, palette,
-   * popovers that want to read the content beneath them). Falls back to a
-   * solid surface where backdrop-filter is unsupported. Owns fill + blur only;
-   * callers set their own token border so the hairline reads in both themes. */
-  .glass {
-    background-color: rgb(var(--glass-fill) / var(--glass-alpha));
-  }
-  @supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
-    .glass {
-      -webkit-backdrop-filter: saturate(180%) blur(20px);
-      backdrop-filter: saturate(180%) blur(20px);
-    }
+  /* Micro-label — the Console signature: 10px uppercase letterspaced caps
+   * for panel headers, section eyebrows, and status segments. */
+  .micro-label {
+    font-size: 10px;
+    line-height: 14px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: rgb(var(--text-muted));
   }
 
-  /* Brand gradient fills — for primary CTAs and accent marks. */
-  .bg-brand-gradient {
-    background-image: linear-gradient(
-      135deg,
-      rgb(var(--brand-hover)) 0%,
-      rgb(var(--brand-default)) 55%,
-      rgb(var(--brand-accent)) 100%
-    );
+  /* LED status dot. Color it with bg-* utilities; pair with .led-pulse for
+   * a live/running state. */
+  .led {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 9999px;
+    flex-shrink: 0;
   }
-  .text-brand-gradient {
-    background-image: linear-gradient(
-      120deg,
-      rgb(var(--brand-default)),
-      rgb(var(--brand-accent))
-    );
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
+  .led-pulse {
+    animation: led-pulse 1.6s ease-in-out infinite;
   }
 
-  /* Aurora — a soft, slowly drifting multi-stop color field for hero and
-   * empty-canvas washes. Sits behind content at low opacity. */
-  .aurora {
+  /* Blueprint grid — a fine engineering-paper line grid for heroes and
+   * empty canvases. Sits behind content at low opacity. */
+  .bg-blueprint {
     background-image:
-      radial-gradient(40rem 40rem at 12% -10%, rgb(var(--aurora-1) / 0.20), transparent 60%),
-      radial-gradient(36rem 36rem at 90% 0%, rgb(var(--aurora-2) / 0.18), transparent 55%),
-      radial-gradient(44rem 44rem at 75% 100%, rgb(var(--aurora-3) / 0.14), transparent 60%),
-      radial-gradient(32rem 32rem at 5% 95%, rgb(var(--aurora-4) / 0.12), transparent 55%);
-    background-repeat: no-repeat;
-  }
-  .aurora-animated {
-    background-size: 200% 200%;
-    animation: aurora-drift 24s ease-in-out infinite alternate;
-  }
-
-  /* Hairline highlight on raised surfaces (Apple's "edge light"). */
-  .edge-light {
-    box-shadow: inset 0 1px 0 0 rgb(255 255 255 / 0.04);
+      linear-gradient(rgb(var(--border-subtle) / 0.45) 1px, transparent 1px),
+      linear-gradient(90deg, rgb(var(--border-subtle) / 0.45) 1px, transparent 1px);
+    background-size: 32px 32px;
   }
 }
 
@@ -309,13 +296,13 @@
     background: transparent;
   }
 
-  /* Animation utilities used across hero / cards / overlays. Pair with
-   * inline `animation-delay` for staggered reveals. */
+  /* Animation utilities. Pair with inline `animation-delay` for staggered
+   * reveals. Kept short and small — instruments don't float. */
   .animate-fade-in-up {
-    animation: fade-in-up 480ms cubic-bezier(0.16, 1, 0.3, 1) both;
+    animation: fade-in-up 320ms cubic-bezier(0.16, 1, 0.3, 1) both;
   }
   .animate-scale-in {
-    animation: scale-in 200ms cubic-bezier(0.16, 1, 0.3, 1) both;
+    animation: scale-in 160ms cubic-bezier(0.16, 1, 0.3, 1) both;
   }
   .animate-shimmer {
     background-size: 200% 100%;
@@ -324,12 +311,12 @@
 }
 
 @keyframes fade-in-up {
-  0% { opacity: 0; transform: translateY(8px); }
+  0% { opacity: 0; transform: translateY(4px); }
   100% { opacity: 1; transform: translateY(0); }
 }
 
 @keyframes scale-in {
-  0% { opacity: 0; transform: scale(0.97); }
+  0% { opacity: 0; transform: scale(0.98); }
   100% { opacity: 1; transform: scale(1); }
 }
 
@@ -338,7 +325,7 @@
   100% { background-position: -200% 0; }
 }
 
-@keyframes aurora-drift {
-  0% { background-position: 0% 50%; }
-  100% { background-position: 100% 50%; }
+@keyframes led-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
 }

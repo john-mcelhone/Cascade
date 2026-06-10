@@ -1,6 +1,5 @@
 import * as React from "react";
 import Link from "next/link";
-import { ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface BreadcrumbItem {
@@ -8,6 +7,10 @@ interface BreadcrumbItem {
   href?: string;
 }
 
+/**
+ * Locator breadcrumb — uppercase micro-labels joined by slashes, reading
+ * like a console path: PROJECTS / MICROTURBINE 30KW / CYCLE.
+ */
 export function Breadcrumb({
   items,
   className,
@@ -18,7 +21,7 @@ export function Breadcrumb({
   return (
     <nav
       aria-label="Breadcrumb"
-      className={cn("flex items-center gap-1 text-sm text-text-muted", className)}
+      className={cn("flex items-center gap-1.5", className)}
     >
       {items.map((item, i) => {
         const isLast = i === items.length - 1;
@@ -27,15 +30,24 @@ export function Breadcrumb({
             {item.href && !isLast ? (
               <Link
                 href={item.href}
-                className="hover:text-text transition-colors duration-fast"
+                className="micro-label transition-colors duration-fast hover:text-text"
               >
                 {item.label}
               </Link>
             ) : (
-              <span className={cn(isLast && "text-text")}>{item.label}</span>
+              <span
+                className={cn("micro-label", isLast && "!text-text-subtle")}
+              >
+                {item.label}
+              </span>
             )}
             {!isLast && (
-              <ChevronRight className="h-3 w-3 text-text-muted/70" />
+              <span
+                aria-hidden
+                className="select-none text-[10px] text-border-strong"
+              >
+                /
+              </span>
             )}
           </React.Fragment>
         );
