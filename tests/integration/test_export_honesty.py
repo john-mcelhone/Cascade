@@ -22,7 +22,6 @@ the full request path including the 503/200 boundary logic.
 from __future__ import annotations
 
 import io
-import math
 import struct
 import sys
 from pathlib import Path
@@ -67,6 +66,12 @@ def app_with_candidate(tmp_path, monkeypatch):
 def _inject_synthetic_candidate():
     """Insert a canonical microturbine-scale compressor candidate so the
     geometry endpoints have a valid entry to act on.
+
+    Params are explore-shaped (the Sobol' sample keys): the geometry
+    endpoints resolve candidates through the normative merge
+    (`build_cc_geometry`), which scales the full geometry from
+    ``rotor_outlet_radius`` — raw geometry-field keys are not honored by
+    the API path.
     """
     from jobs import CANDIDATE_INDEX
 
@@ -74,16 +79,14 @@ def _inject_synthetic_candidate():
     CANDIDATE_INDEX[cid] = {
         "id": cid,
         "job_id": "synthetic-job",
+        "project_id": "microturbine-30kw",
         "params": {
-            "inducer_hub_radius": 0.018,
-            "inducer_tip_radius": 0.050,
-            "impeller_outlet_radius": 0.100,
-            "blade_height_outlet": 0.012,
-            "blade_count": 18,
-            "beta_2_metal_rad": math.pi / 3,
-            "tip_clearance": 0.0005,
+            "rotor_outlet_radius": 0.030,
+            "blade_count": 14,
+            "tip_clearance": 0.0003,
         },
         "objectives": {"eta_tt": 0.82},
+        "status": "VALID",
     }
     return cid
 
@@ -184,9 +187,9 @@ class TestGLBExportHonesty:
         returned GLB must contain actual mesh data (meshes array, accessors).
         """
         try:
-            from cascade.geometry import generate_impeller_glb  # type: ignore
+            from cascade.geometry import impeller_mesh  # type: ignore  # noqa: F401
         except ImportError:
-            pytest.skip("cascade.geometry.generate_impeller_glb not available — stub path only")
+            pytest.skip("cascade.geometry not available — stub path only")
 
         import httpx
         transport = httpx.ASGITransport(app=app_with_candidate)
@@ -194,7 +197,7 @@ class TestGLBExportHonesty:
             r = await client.get(f"/api/candidates/{_CANDIDATE_ID}/geometry")
         assert r.status_code == 200
         assert r.headers.get("X-Cascade-Stub") == "false", (
-            "generate_impeller_glb is importable but X-Cascade-Stub=true — "
+            "cascade.geometry is importable but X-Cascade-Stub=true — "
             "the endpoint is returning a stub even though real geometry is available."
         )
         assert _glb_has_mesh_data(r.content), (
@@ -253,13 +256,13 @@ class TestSTLExportHonesty:
     async def test_real_stl_has_nonzero_triangles_when_geometry_available(
         self, app_with_candidate
     ):
-        """When generate_impeller_stl is importable, the export must return
+        """When cascade.geometry is importable, the export must return
         actual geometry (> 0 triangles).
         """
         try:
-            from cascade.geometry import generate_impeller_stl  # type: ignore
+            from cascade.geometry import impeller_mesh  # type: ignore  # noqa: F401
         except ImportError:
-            pytest.skip("cascade.geometry.generate_impeller_stl not available")
+            pytest.skip("cascade.geometry not available")
 
         import httpx
         transport = httpx.ASGITransport(app=app_with_candidate)
@@ -269,7 +272,7 @@ class TestSTLExportHonesty:
 
         tri_count = _parse_binary_stl_triangle_count(r.content)
         assert tri_count > 0, (
-            f"Real STL (generate_impeller_stl importable) has 0 triangles. "
+            f"Real STL (cascade.geometry importable) has 0 triangles. "
             f"The geometry module may have returned an empty mesh."
         )
         assert r.headers.get("X-Cascade-Stub") == "false"
@@ -410,9 +413,6 @@ class TestNDFExportHonesty:
         transport = httpx.ASGITransport(app=app_with_candidate)
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
             r = await client.get(f"/api/candidates/{_CANDIDATE_ID}/export_turbogrid.ndf")
-
-        if r.status_code == 500:
-            pytest.skip(f"NDF export failed with 500: {r.text[:200]}")
 
         assert r.status_code == 200, f"NDF export status {r.status_code}: {r.text[:200]}"
         text = r.text

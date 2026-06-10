@@ -119,6 +119,12 @@ OCC-dependent formats skip cleanly when `pythonocc-core` is not installed; the s
 correct result on a vanilla install, not a test failure. No row here should be interpreted as
 "passes unconditionally" for STEP/IGES.
 
+**Scope note:** the structural checks below assert file-format validity (magic bytes, section
+markers, vertex count ≥ 1), not semantic dimensions. Dimensional correctness of the generated
+geometry is pinned separately by `tests/geometry/test_passage_height.py` (exit passage height ≈
+b₂ + tip clearance, KG-G-10) and `apps/api/tests/test_candidate_geometry_wiring.py` (served mesh
+radius ≈ the candidate's r₂, mesh geometry == the normative merged geometry).
+
 | Case | Format | Invariants checked | OCC required? | Status |
 |------|--------|--------------------|--------------|--------|
 | GLB structural validity | GLB (glTF binary) | magic, version 2, mesh array, bufferViews, vertex count ≥ 1 | No (base install) | ✅ PASS |

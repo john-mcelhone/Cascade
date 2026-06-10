@@ -48,6 +48,10 @@ const Plot = dynamic(
 const FAILURE_STATUSES = new Set([
   "INVALID_GEOMETRY",
   "REGIME_OUT_OF_VALIDITY",
+  // Solved fine, but a standard 5-axis machining cell cannot produce the
+  // geometry — plotted at its REAL objectives so the cost of the lost
+  // design is visible, greyed out like every other refusal.
+  "MANUFACTURABILITY_FAILED",
   "STALL_SURGE",
   "CHOKED",
   "FAILED",
@@ -186,7 +190,12 @@ export function DesignScatter({ projectId }: DesignScatterProps) {
       x: failed.map((c) => valueOf(c, scatterX)),
       y: failed.map((c) => valueOf(c, scatterY)),
       customdata: failed.map((c) => c.id),
-      text: failed.map((c) => `${c.id}<br />status: ${c.status}`),
+      text: failed.map((c) => {
+        const detail = c.error_message
+          ? `<br />${c.error_message.slice(0, 140)}`
+          : "";
+        return `${c.id}<br />status: ${c.status}${detail}`;
+      }),
       hovertemplate: "%{text}<extra></extra>",
       marker: {
         size: 5,

@@ -131,6 +131,7 @@ def _build_meridional_curves(
         r_outlet=r_out,
         z_axial=z_axial,
         tip_clearance=tip_clr,
+        blade_height_radial=geometry.blade_height_outlet,
         flow="centrifugal",
     )
     z_hub, r_hub = cubic_bspline_curve(hub_ctrl, n_meridional)
@@ -201,7 +202,12 @@ def _build_single_blade(
     # Blade thickness in radians at each meridional station: convert
     # thickness in metres to a Δθ at the local radius. Use the local
     # circumferential pitch = 2π/Z as a reference.
-    t_max_m = 0.015 * geometry.impeller_outlet_radius  # 1.5% of D₂ — typical
+    # 1.5% of D₂ (typical), floored at the 5-axis milling minimum so small
+    # wheels never get blades thinner than a cutter can leave standing.
+    # Shared with the manufacturability rules — see manufacturability.limits.
+    from cascade.manufacturability.limits import machinable_blade_peak_thickness_m
+
+    t_max_m = machinable_blade_peak_thickness_m(geometry.impeller_outlet_radius)
     t_distribution = blade_thickness_distribution(n_m, t_max_m)
 
     # Apply theta_offset (used for splitter placement at half pitch).

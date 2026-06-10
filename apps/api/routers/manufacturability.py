@@ -91,10 +91,11 @@ def _resolve_machine_class(project: Dict[str, Any]) -> str:
 def _resolve_geometry(project: Dict[str, Any], machine_class: str) -> tuple[Any, str, Optional[str]]:
     """Build a geometry instance for the active candidate.
 
-    Returns ``(geometry, geometry_name, candidate_id)``. We use the same
-    merging strategy as the analysis route: the most-recent VALID candidate
-    overrides the machine-class defaults. When no candidates exist we fall
-    back to the defaults (this is the case on a fresh project).
+    Returns ``(geometry, geometry_name, candidate_id)``. The active (pinned
+    or most-recent VALID) candidate resolves through the normative
+    ``_meanline_geom`` merge — the same rename + r2-scaling the explore
+    evaluator used to score it. When no candidates exist we fall back to
+    the machine-class defaults (this is the case on a fresh project).
     """
     defaults = dict(_CC_DEFAULTS if machine_class == "centrifugal_compressor"
                     else _RIT_DEFAULTS)
@@ -119,9 +120,27 @@ def _resolve_geometry(project: Dict[str, Any], machine_class: str) -> tuple[Any,
             if candidate:
                 break
     if candidate:
-        for k, v in (candidate.get("params") or {}).items():
-            if k in defaults:
-                defaults[k] = v
+        # Use the same normative merge as the routed-candidate path (and
+        # the explore evaluator): rename + r2-scaling via _meanline_geom.
+        # A raw key-merge into the machine-class defaults silently drops
+        # `rotor_outlet_radius` (not a defaults key), grading a wheel
+        # unrelated to the candidate on screen.
+        from routers._meanline_geom import build_cc_geometry, build_rit_geometry
+
+        builder = (
+            build_cc_geometry
+            if machine_class == "centrifugal_compressor"
+            else build_rit_geometry
+        )
+        try:
+            geom, _op = builder(sample=candidate.get("params") or {})
+        except Exception:
+            # A refusing candidate falls back to the machine-class
+            # defaults — and must not be reported as graded.
+            candidate_id = None
+        else:
+            name = project.get("name", project.get("id", "geometry"))
+            return geom, name, candidate_id
 
     if machine_class == "centrifugal_compressor":
         from cascade.meanline import CentrifugalCompressorGeometry
@@ -179,12 +198,12 @@ def _resolve_routed_candidate_geometry(
 ) -> tuple[Any, str]:
     """Build the geometry for an explicitly routed ``candidate_id`` (U8).
 
-    Unlike the active-candidate heuristic above (which key-merges the 3
-    sampled params into the machine-class defaults), the routed path uses
-    the normative merge helpers from ``_meanline_geom`` — the same rename +
-    r2-scaling the explore evaluator and the geometry handoff use — so the
-    candidate detail page's verdict is measured on the geometry the
-    candidate actually resolves to.
+    Uses the normative merge helpers from ``_meanline_geom`` — the same
+    rename + r2-scaling the explore evaluator, the geometry handoff, and
+    the active-candidate heuristic above all use — so the candidate detail
+    page's verdict is measured on the geometry the candidate actually
+    resolves to. Unlike the heuristic, a refusing candidate here is a hard
+    422 (the caller explicitly asked for THIS candidate).
     """
     cand = CANDIDATE_INDEX.get(candidate_id)
     if cand is None:

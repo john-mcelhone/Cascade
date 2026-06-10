@@ -126,6 +126,12 @@ export function candidateStatusChip(status: string): StatusChip {
         variant: "danger",
         icon: "x-octagon",
       };
+    case "MANUFACTURABILITY_FAILED":
+      return {
+        label: "Not manufacturable",
+        variant: "danger",
+        icon: "x-octagon",
+      };
     default:
       return { label: status, variant: "warning", icon: "alert-triangle" };
   }
@@ -138,6 +144,15 @@ export function handoffDisabledReason(args: {
 }): string | null {
   const { candidate, hasCompressor } = args;
   if (!candidate) return "Candidate not loaded.";
+  if (candidate.status === "MANUFACTURABILITY_FAILED") {
+    // The design point solved fine — the geometry just can't be made.
+    return (
+      "This candidate cannot be produced on a standard 5-axis machining " +
+      "cell — an unmakeable geometry cannot honestly drive the cycle " +
+      "co-simulation. Loosen the manufacturability overrides and re-run " +
+      "the exploration to reconsider it."
+    );
+  }
   if (candidate.status !== "VALID") {
     return (
       "This candidate's own design point refused " +

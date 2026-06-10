@@ -322,7 +322,7 @@ async def test_analysis_endpoint_centrifugal_compressor_path(app):
 
 
 @pytest.mark.asyncio
-async def test_candidate_geometry_returns_stub(app):
+async def test_candidate_geometry_returns_real_glb(app):
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         _ = await client.get("/api/health")
@@ -338,16 +338,19 @@ async def test_candidate_geometry_returns_stub(app):
                 break
             await asyncio.sleep(0.05)
 
-        # Grab candidate list
+        # Grab candidate list and pick a VALID candidate (an
+        # INVALID_GEOMETRY one is a 422 by contract, not a mesh).
         clist = await client.get("/api/candidates", params={"job_id": job_id})
         assert clist.status_code == 200
         candidates = clist.json()
-        assert len(candidates) > 0
-        cid = candidates[0]["id"]
+        valid = [c for c in candidates if c.get("status") == "VALID"]
+        assert len(valid) > 0
+        cid = valid[0]["id"]
 
-        # Geometry stub
+        # Real geometry: cascade.geometry is importable in the test env,
+        # so the stub fallback must NOT be taken.
         geom = await client.get(f"/api/candidates/{cid}/geometry")
         assert geom.status_code == 200
-        assert geom.headers.get("X-Cascade-Stub") in ("true", "false")
+        assert geom.headers.get("X-Cascade-Stub") == "false"
         # glTF binary magic
         assert geom.content[:4] == b"glTF"

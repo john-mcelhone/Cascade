@@ -67,10 +67,10 @@ def _build_meridional_curves(
     tip_clr = geometry.tip_clearance
 
     # The hub starts at (z_axial, r_inlet) (radial inlet) and ends at
-    # (0, r_out_hub). The shroud starts at (z_axial, r_inlet) (the same
-    # LE, but with tip-clearance offset above r_inlet — for RITs the LE
-    # tip clearance is small, often zero in published geometries) and
-    # ends at (0, r_out_tip).
+    # (0, r_out_hub). The shroud starts at the same radius r_inlet but
+    # axially offset by blade_height_inlet + tip_clearance (at the radial
+    # LE the passage height and clearance are both axial), and ends at
+    # (0, r_out_tip).
     # We use the centrifugal default-hub helper with flow="radial" which
     # gives the mirror shape.
     hub_ctrl = default_hub_control_points(
@@ -84,6 +84,7 @@ def _build_meridional_curves(
         r_outlet=r_out_tip,
         z_axial=z_axial,
         tip_clearance=tip_clr,
+        blade_height_radial=geometry.blade_height_inlet,
         flow="radial",
     )
     z_hub, r_hub = cubic_bspline_curve(hub_ctrl, n_meridional)
@@ -128,7 +129,11 @@ def _build_single_blade(
     theta_hub_camber = camber_theta_from_beta(s_hub, r_hub_b, beta)
     theta_shroud_camber = theta_hub_camber.copy()
 
-    t_max_m = 0.015 * geometry.rotor_inlet_radius
+    # 1.5% of rotor inlet radius (typical), floored at the casting minimum
+    # (RIT rotors are cast, not milled — see manufacturability.limits).
+    from cascade.manufacturability.limits import cast_blade_peak_thickness_m
+
+    t_max_m = cast_blade_peak_thickness_m(geometry.rotor_inlet_radius)
     t_distribution = blade_thickness_distribution(n_m, t_max_m)
 
     theta_hub_camber = theta_hub_camber + theta_offset

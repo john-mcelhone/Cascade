@@ -238,6 +238,9 @@ export interface MergedGeometry {
   operating_point: Record<string, number | string>;
   sampled_keys: string[];
   meanline_rpm_rpm: number;
+  /** Meridional (z, r) polylines in metres — {"hub": [[z,r],...],
+   *  "shroud": [[z,r],...]}; empty when the server lacks cascade.geometry. */
+  meridional: Record<string, [number, number][]>;
 }
 
 export async function getMergedGeometry(

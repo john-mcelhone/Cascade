@@ -1,10 +1,16 @@
 """Candidate detail + geometry routes.
 
-The geometry endpoints depend on `cascade.geometry` which is being
-written by a sibling agent. Until that lands we return a *stub* glTF —
-an empty mesh wrapped in a minimal glb container — and tag the response
-with `X-Cascade-Stub: true` so the front-end can show the wireframe
-placeholder.
+Every geometry/export endpoint builds its geometry through the same
+normative merge the mean-line evaluator uses (`_merged_cc_geometry` →
+`build_cc_geometry`), so the mesh a user sees or downloads is exactly the
+machine that produced the candidate's numbers.
+
+Stub policy: a *stub* payload (empty glTF/STL, tagged `X-Cascade-Stub:
+true`) is served only when the `cascade.geometry` package itself cannot
+be imported (a dev environment without the solver installed). A candidate
+whose parameters refuse to merge is a 422 `CANDIDATE_GEOMETRY_INVALID`;
+a real generation failure is a 500 with the error text — never a silent
+stub.
 """
 
 from __future__ import annotations
@@ -279,7 +285,7 @@ def candidate_merged_geometry(
     from routers._meanline_geom import _EXPLORE_PARAM_MAP
 
     cand = _candidate_scoped_or_404(candidate_id, project_id)
-    _geom, op, geometry_params = _merged_cc_geometry(cand)
+    geom, op, geometry_params = _merged_cc_geometry(cand)
     sampled_keys = [
         geom_key
         for sobol_key, geom_key in _EXPLORE_PARAM_MAP.items()
@@ -292,7 +298,37 @@ def candidate_merged_geometry(
         operating_point=dict(op),
         sampled_keys=sampled_keys,
         meanline_rpm_rpm=float(op["rpm"]),
+        meridional=_meridional_polylines(geom),
     )
+
+
+def _meridional_polylines(geom, n_samples: int = 100) -> Dict[str, List[List[float]]]:
+    """Sample the merged geometry's hub/shroud meridional contours.
+
+    Uses the SAME B-spline construction the mesh generator and the vendor
+    exports use (`_build_meridional_curves`), so the 2D flow-path plot is
+    the meshed contour, not an approximation. Returns an empty dict when
+    `cascade.geometry` is unavailable (dev mode) — the front-end hides the
+    meridional view in that case.
+    """
+    try:
+        from cascade.geometry.impeller import (  # type: ignore[attr-defined]
+            _build_meridional_curves,
+        )
+    except ImportError:
+        return {}
+    try:
+        z_hub, r_hub, z_shroud, r_shroud = _build_meridional_curves(
+            geom, n_samples,
+        )
+    except ValueError:
+        # Degenerate shroud (parameter-driven) — the geometry_params are
+        # still valid and served; only the contour plot is unavailable.
+        return {}
+    return {
+        "hub": [[float(z), float(r)] for z, r in zip(z_hub, r_hub)],
+        "shroud": [[float(z), float(r)] for z, r in zip(z_shroud, r_shroud)],
+    }
 
 
 @router.post("/{candidate_id}/send-to-cycle", response_model=SendToCycleResponse)
@@ -498,7 +534,10 @@ def pin_candidate(
 )
 def candidate_geometry(
     candidate_id: str,
-    lod: str = Query(default="medium", description="One of: low, medium, hi"),
+    lod: str = Query(
+        default="medium",
+        description="One of: low/preview, medium/standard, hi/high",
+    ),
 ) -> Response:
     """Stream a browser-preview GLB for a candidate at the requested LOD.
 
@@ -509,9 +548,18 @@ def candidate_geometry(
     """
     if candidate_id not in CANDIDATE_INDEX:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="not found")
+    lod_name = _PREVIEW_LOD_NAMES.get(lod.lower())
+    if lod_name is None:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"unknown lod {lod!r}; accepted: "
+                f"{sorted(_PREVIEW_LOD_NAMES)} (preview endpoint is capped "
+                "to HIGH — use /export.glb for EXPORT fidelity)"
+            ),
+        )
 
-    # Defer to cascade.geometry if available; otherwise emit a stub glb.
-    payload, is_stub = _resolve_glb(candidate_id, lod)
+    payload, is_stub = _resolve_glb(candidate_id, lod_name)
     headers = {
         "X-Cascade-Stub": "true" if is_stub else "false",
         # Explicit inline disposition — this is a *preview*, not a download.
@@ -522,9 +570,10 @@ def candidate_geometry(
 
 @router.get("/{candidate_id}/export.glb")
 def candidate_export_glb(candidate_id: str) -> Response:
+    """Download the candidate's full EXPORT-LOD GLB (CAM fidelity)."""
     if candidate_id not in CANDIDATE_INDEX:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="not found")
-    payload, is_stub = _resolve_glb(candidate_id, "hi")
+    payload, is_stub = _resolve_glb(candidate_id, "EXPORT")
     headers = {
         "Content-Disposition": f'attachment; filename="{candidate_id}.glb"',
         "X-Cascade-Stub": "true" if is_stub else "false",
@@ -583,15 +632,9 @@ def candidate_export_turbogrid_ndf(candidate_id: str) -> Response:
             detail=f"failed to import cascade.geometry: {exc}",
         ) from exc
 
-    cand = CANDIDATE_INDEX[candidate_id]
-    params = cand.get("params", {})
-    try:
-        geometry = _geometry_from_candidate_params(params)
-    except Exception as exc:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"failed to build geometry from candidate params: {exc}",
-        ) from exc
+    # The normative merge — 422 CANDIDATE_GEOMETRY_INVALID propagates for
+    # parameters that refuse to merge.
+    geometry = _merged_candidate_geometry(candidate_id)
 
     import tempfile
     from pathlib import Path as _Path
@@ -661,16 +704,9 @@ def candidate_export_fluid_step(candidate_id: str) -> Response:
             ),
         ) from exc
 
-    cand = CANDIDATE_INDEX[candidate_id]
-    params = cand.get("params", {})
-
-    try:
-        geometry = _geometry_from_candidate_params(params)
-    except Exception as exc:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"failed to build geometry from candidate params: {exc}",
-        ) from exc
+    # The normative merge — 422 CANDIDATE_GEOMETRY_INVALID propagates for
+    # parameters that refuse to merge.
+    geometry = _merged_candidate_geometry(candidate_id)
 
     with tempfile.TemporaryDirectory() as tdir:
         tmp_path = _Path(tdir) / f"{candidate_id}_fluid.step"
@@ -779,15 +815,10 @@ def _cad_export_response(candidate_id: str, fmt: str) -> Response:
             ),
         ) from exc
 
-    cand = CANDIDATE_INDEX[candidate_id]
-    params = cand.get("params", {})
-
-    # Build a Cascade geometry from the candidate's parameters. The
-    # candidates currently in scope for this UI are centrifugal-impeller
-    # design-space points (see jobs.py); the resolver below maps the
-    # parameter dict to a `CentrifugalCompressorGeometry`.
+    # The normative merge — the exported geometry IS the machine behind
+    # the candidate's numbers. 422 propagates for refusing parameters.
+    geometry = _merged_candidate_geometry(candidate_id)
     try:
-        geometry = _geometry_from_candidate_params(params)
         mesh = impeller_mesh(geometry, lod=MeshLOD.EXPORT, with_splitter=True)
     except Exception as exc:
         raise HTTPException(
@@ -832,63 +863,100 @@ def _cad_export_response(candidate_id: str, fmt: str) -> Response:
     )
 
 
-def _geometry_from_candidate_params(params: Dict[str, Any]):  # type: ignore[no-untyped-def]
-    """Build a `CentrifugalCompressorGeometry` from a candidate dict.
+# LOD query-string aliases → MeshLOD enum *names*. The conversion to the
+# enum member happens inside the resolvers, after the `cascade.geometry`
+# import probe — a module-level MeshLOD import would break the
+# cascade-absent dev mode that the stub path exists for.
+# The preview endpoint is capped to HIGH by construction: "export" is
+# deliberately absent from this map.
+_PREVIEW_LOD_NAMES: Dict[str, str] = {
+    "low": "PREVIEW",
+    "preview": "PREVIEW",
+    "medium": "STANDARD",
+    "standard": "STANDARD",
+    "hi": "HIGH",
+    "high": "HIGH",
+}
 
-    Mirrors the resolver used by `_resolve_glb` — accepts the loose
-    parameter names emitted by the current Sobol exploration jobs and
-    falls back to sane microturbine defaults for missing keys.
+
+def _merged_candidate_geometry(candidate_id: str):  # type: ignore[no-untyped-def]
+    """Resolve a candidate to its normatively merged geometry.
+
+    The merge is the same one the explore evaluator scored the candidate
+    with (`build_cc_geometry`), so the returned geometry IS the machine
+    behind the candidate's eta_tt / M_rel numbers. Raises 422
+    `CANDIDATE_GEOMETRY_INVALID` (via `_merged_cc_geometry`) when the
+    parameters refuse to merge.
     """
-    import math
-
-    from cascade.meanline.centrifugal_compressor import (
-        CentrifugalCompressorGeometry,
-    )
-
-    return CentrifugalCompressorGeometry(
-        inducer_hub_radius=float(
-            params.get("inducer_hub_radius", 0.018),
-        ),
-        inducer_tip_radius=float(
-            params.get("inducer_tip_radius", 0.050),
-        ),
-        impeller_outlet_radius=float(
-            params.get("impeller_outlet_radius", 0.100),
-        ),
-        blade_height_outlet=float(
-            params.get("blade_height_outlet", 0.012),
-        ),
-        blade_count=int(params.get("blade_count", 18)),
-        beta_2_metal_rad=float(
-            params.get("beta_2_metal_rad", math.pi / 3),
-        ),
-        tip_clearance=float(params.get("tip_clearance", 0.0005)),
-    )
+    cand = CANDIDATE_INDEX[candidate_id]
+    geom, _op, _geometry_params = _merged_cc_geometry(cand)
+    return geom
 
 
-def _resolve_glb(candidate_id: str, lod: str):
-    """Try the real generator; fall back to stub. Returns (bytes, is_stub)."""
+def _resolve_glb(candidate_id: str, lod_name: str):
+    """Build the candidate's real GLB. Returns ``(bytes, is_stub)``.
 
+    Stub only when `cascade.geometry` is unimportable; merge refusals are
+    422; generation failures are 500.
+    """
     try:
-        from cascade.geometry import generate_impeller_glb  # type: ignore[attr-defined]
+        from cascade.geometry import (  # type: ignore[attr-defined]
+            MeshLOD,
+            export_glb,
+            impeller_mesh,
+        )
     except Exception:
         return _stub_glb(), True
+    geometry = _merged_candidate_geometry(candidate_id)
     try:
-        cand = CANDIDATE_INDEX[candidate_id]
-        payload = generate_impeller_glb(params=cand.get("params", {}), lod=lod)
-        return payload, False
-    except Exception:
-        return _stub_glb(), True
+        mesh = impeller_mesh(
+            geometry, lod=MeshLOD[lod_name], with_splitter=True,
+        )
+        return export_glb(mesh), False
+    except ValueError as exc:
+        # Parameter-driven refusal (e.g. degenerate shroud: blade height +
+        # clearance >= axial length) — the candidate's geometry, not a
+        # server fault.
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "error_code": "CANDIDATE_GEOMETRY_INVALID",
+                "message": f"impeller mesh refused: {exc}",
+            },
+        ) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"impeller mesh generation failed: {exc}",
+        ) from exc
 
 
 def _resolve_stl(candidate_id: str):
+    """Build the candidate's real EXPORT-LOD STL. Returns ``(bytes, is_stub)``."""
     try:
-        from cascade.geometry import generate_impeller_stl  # type: ignore[attr-defined]
+        from cascade.geometry import (  # type: ignore[attr-defined]
+            MeshLOD,
+            export_stl,
+            impeller_mesh,
+        )
     except Exception:
         return _stub_stl(), True
+    geometry = _merged_candidate_geometry(candidate_id)
     try:
-        cand = CANDIDATE_INDEX[candidate_id]
-        payload = generate_impeller_stl(params=cand.get("params", {}))
-        return payload, False
-    except Exception:
-        return _stub_stl(), True
+        mesh = impeller_mesh(
+            geometry, lod=MeshLOD.EXPORT, with_splitter=True,
+        )
+        return export_stl(mesh), False
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "error_code": "CANDIDATE_GEOMETRY_INVALID",
+                "message": f"impeller mesh refused: {exc}",
+            },
+        ) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"impeller mesh generation failed: {exc}",
+        ) from exc

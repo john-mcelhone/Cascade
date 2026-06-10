@@ -19,7 +19,7 @@ import math
 import time
 import uuid
 import warnings as _warnings
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter
 
@@ -49,11 +49,16 @@ def _default_parameter_ranges() -> Dict[str, Any]:
             min=0.015, max=0.045, unit="m", scale="linear"
         ),
         "blade_count": ParameterRange(min=10, max=18, unit="dimensionless", scale="linear"),
-        "tip_clearance": ParameterRange(min=1e-4, max=5e-4, unit="m", scale="log"),
+        # Floor at the manufacturable cold clearance (Boyce §3.4, 0.25 mm) —
+        # sweeping below it only produces MANUFACTURABILITY_FAILED candidates.
+        "tip_clearance": ParameterRange(min=2.5e-4, max=5e-4, unit="m", scale="log"),
     }
 
 
-def _meanline_evaluator(params: Dict[str, Any]) -> Dict[str, Any]:
+def _meanline_evaluator(
+    params: Dict[str, Any],
+    mfg_overrides: Optional[Dict[str, float]] = None,
+) -> Dict[str, Any]:
     """Real mean-line evaluator for the design-space scatter.
 
     Constructs a ``CentrifugalCompressorGeometry`` from the Sobol' sample,
@@ -61,12 +66,23 @@ def _meanline_evaluator(params: Dict[str, Any]) -> Dict[str, Any]:
     Candidate-shaped dict the front-end expects.
 
     Status codes per SPEC §13 taxonomy:
-    - ``VALID``: solver converged within the validity envelope.
+    - ``VALID``: solver converged within the validity envelope AND the
+      geometry passes every manufacturability rule (5-axis machinability —
+      the sweep only promotes designs that can physically be made).
+    - ``MANUFACTURABILITY_FAILED``: solver converged (objectives are REAL,
+      so the scatter can show what the un-makeable design would have
+      achieved) but the geometry violates one or more manufacturability
+      rules. The violated rule names land in ``_error``. Per-project rule
+      overrides (``settings.manufacturability_overrides``) are honoured
+      via ``mfg_overrides``.
     - ``REGIME_OUT_OF_VALIDITY``: relative Mach or other regime variable
       exceeds the loss model's validity range (raised by the solver).
     - ``INVALID_GEOMETRY``: geometry dimensions are invalid (raised by
       ``CentrifugalCompressorGeometry.__post_init__``).
     - ``NON_CONVERGED``: solver failed to converge (MeanlineConvergenceError).
+
+    Every candidate carries a ``manufacturable`` constraint flag; only
+    VALID candidates have it True.
 
     ``eta_ts`` is computed from ``result.h_s2_at_p2_J_per_kg`` inside the
     solver (ADAPT-022), not as a fixed offset from eta_tt.
@@ -95,7 +111,7 @@ def _meanline_evaluator(params: Dict[str, Any]) -> Dict[str, Any]:
                 "mass": estimate_mass_kg(r2),
                 "M_rel": 0.0,
             },
-            "constraints": {"M_rel_under_choke": False},
+            "constraints": {"M_rel_under_choke": False, "manufacturable": False},
             "status": "INVALID_GEOMETRY",
             "_error": str(exc),
         }
@@ -124,7 +140,7 @@ def _meanline_evaluator(params: Dict[str, Any]) -> Dict[str, Any]:
                 "mass": estimate_mass_kg(r2),
                 "M_rel": 9.99,  # signals out-of-validity to UI
             },
-            "constraints": {"M_rel_under_choke": False},
+            "constraints": {"M_rel_under_choke": False, "manufacturable": False},
             "status": "REGIME_OUT_OF_VALIDITY",
         }
     except Exception:
@@ -139,7 +155,7 @@ def _meanline_evaluator(params: Dict[str, Any]) -> Dict[str, Any]:
                 "mass": estimate_mass_kg(r2),
                 "M_rel": 0.0,
             },
-            "constraints": {"M_rel_under_choke": False},
+            "constraints": {"M_rel_under_choke": False, "manufacturable": False},
             "status": "NON_CONVERGED",
         }
 
@@ -147,15 +163,45 @@ def _meanline_evaluator(params: Dict[str, Any]) -> Dict[str, Any]:
     mass_kg = estimate_mass_kg(r2)
     M_rel = float(result.max_M_rel)
 
+    objectives = {
+        "eta_tt": float(result.eta_tt),
+        "eta_ts": float(result.eta_ts),
+        "power": power_kW,
+        "mass": mass_kg,
+        "M_rel": M_rel,
+    }
+
+    # Manufacturability gate — the sweep only promotes designs a standard
+    # 5-axis machining cell can physically produce. The mean-line solve
+    # already succeeded, so the objectives stay REAL: the scatter shows
+    # what the un-makeable design would have achieved, greyed out.
+    from cascade.manufacturability import check_impeller
+
+    mfg_report = check_impeller(geom, overrides=mfg_overrides or {})
+    if mfg_report.has_violations:
+        violated = ", ".join(
+            f"{v.rule_name} ({v.measured:.3g} {v.units})"
+            for v in mfg_report.violations
+        )
+        return {
+            "objectives": objectives,
+            "constraints": {
+                "M_rel_under_choke": M_rel < 1.2,
+                "manufacturable": False,
+            },
+            "status": "MANUFACTURABILITY_FAILED",
+            "_error": (
+                "not producible on a standard 5-axis machining cell — "
+                f"violated: {violated}"
+            ),
+        }
+
     return {
-        "objectives": {
-            "eta_tt": float(result.eta_tt),
-            "eta_ts": float(result.eta_ts),
-            "power": power_kW,
-            "mass": mass_kg,
-            "M_rel": M_rel,
+        "objectives": objectives,
+        "constraints": {
+            "M_rel_under_choke": M_rel < 1.2,
+            "manufacturable": True,
         },
-        "constraints": {"M_rel_under_choke": M_rel < 1.2},
         "status": "VALID",
     }
 
@@ -187,6 +233,20 @@ def _explore_worker(project_id: str, req: ExploreRequest):
             )
             samples = sampler.generate()
 
+        # Per-project manufacturability-rule overrides flow into the sweep
+        # gate, so loosening a rule on the panel and re-running exploration
+        # widens the producible space accordingly.
+        try:
+            mfg_overrides = {
+                str(k): float(v)
+                for k, v in (
+                    (PROJECTS.get(project_id, {}).get("settings", {}) or {})
+                    .get("manufacturability_overrides", {}) or {}
+                ).items()
+            }
+        except (TypeError, ValueError):
+            mfg_overrides = {}
+
         all_candidates: List[Dict[str, Any]] = []
         batch_size = max(1, len(samples) // 20)
         for i, sample in enumerate(samples):
@@ -196,7 +256,7 @@ def _explore_worker(project_id: str, req: ExploreRequest):
                 k: float(v.magnitude) if hasattr(v, "magnitude") else v
                 for k, v in sample.items()
             }
-            result = _meanline_evaluator(sample)
+            result = _meanline_evaluator(sample, mfg_overrides=mfg_overrides)
             cid = uuid.uuid4().hex
             cand = {
                 "id": cid,
@@ -207,6 +267,7 @@ def _explore_worker(project_id: str, req: ExploreRequest):
                 "objectives": result["objectives"],
                 "constraints": result["constraints"],
                 "status": result["status"],
+                "error_message": result.get("_error"),
             }
             all_candidates.append(cand)
             CANDIDATE_INDEX[cid] = cand

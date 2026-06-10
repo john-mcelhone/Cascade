@@ -360,6 +360,15 @@ This documentation replaces the previous "silent relabelling as characterization
   - π_compressor > 60 (geographically unprecedented; warning)
   - T_combustor_exit > 2100 K (uncooled material limit; refusal unless cooled-row plugin enabled)
   - Refusal triggers explicit `RefuseToCompute` exception with cause code (`REGIME_OUT_OF_VALIDITY`)
+- **Design-exploration candidate statuses** (the flow-path sweep): `VALID`,
+  `MANUFACTURABILITY_FAILED`, `REGIME_OUT_OF_VALIDITY`, `INVALID_GEOMETRY`,
+  `NON_CONVERGED`. `VALID` requires the mean-line solve to converge AND the
+  geometry to pass every manufacturability rule (`cascade.manufacturability`,
+  per-project overridable) — the sweep only promotes designs a standard
+  5-axis machining cell can physically produce. `MANUFACTURABILITY_FAILED`
+  candidates keep their real solved objectives (the scatter shows what the
+  un-makeable design would have achieved) plus the violated rule names; they
+  cannot be sent to cycle.
 - **Surge/choke detection** (closes SR-010):
   - Surge line: cubic-spline regression on each speedline; `surge` = leftmost (ṁ_corr, π) where `∂π/∂ṁ ≥ −1e-3 · π_design / ṁ_design`.
   - Choke line: rightmost point where mean-line returns `CHOKED` (Mach=1 at throat or ṁ saturation).

@@ -82,6 +82,11 @@ export interface FlowPathState {
   showHud: boolean;
   setDisplayMode: (m: DisplayMode) => void;
   setShading: (s: ShadingMode) => void;
+  /** True while the served mesh is a server stub (ephemeral, not
+   *  persisted) — gates the download strip so a placeholder is never
+   *  downloadable as if it were the candidate's geometry. */
+  meshStubbed: boolean;
+  setMeshStubbed: (v: boolean) => void;
 
   // ---- Left-pane tab + scatter parallel-coords toggle (persisted) ----
   parameterTab: ParameterTabKey;
@@ -181,6 +186,8 @@ export const useFlowPathStore = create<FlowPathState>()(
       showHud: true,
       setDisplayMode: (m) => set({ displayMode: m }),
       setShading: (s) => set({ shading: s }),
+      meshStubbed: false,
+      setMeshStubbed: (v) => set({ meshStubbed: v }),
 
       parameterTab: "boundary",
       setParameterTab: (t) => set({ parameterTab: t }),

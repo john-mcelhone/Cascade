@@ -7,8 +7,6 @@
 Cycle → mean-line design → design-space exploration → performance maps → rotor dynamics,
 in a browser, from one git-diffable project.
 
-*The flow-path explorer at v0.1.0 — a Sobol' sweep, a filter expression, and the picked impeller in 3D.*
-
 [![License: AGPL-3.0-or-later](https://img.shields.io/badge/license-AGPL--3.0--or--later-blue)](LICENSE)
 [![Python 3.12](https://img.shields.io/badge/python-3.12-3776AB)](pyproject.toml)
 [![Next.js 15](https://img.shields.io/badge/next.js-15-black)](apps/web)
@@ -38,7 +36,7 @@ Three rules keep it honest:
 |---|---|
 | **Cycle design** | 0D thermodynamic solver — simple, recuperated, and multi-shaft Brayton (power-balance spool matching; map-based multi-spool matching deferred, [KG-003](KNOWN_GAPS.md)) — with a real-gas equation of state (NASA 9-coefficient polynomials + CoolProp). Burner pinned by outlet temperature or fuel mass flow. |
 | **Mean-line design** | Radial inflow turbine and centrifugal compressor preliminary design with cited loss models (see table below). |
-| **Design exploration** | Sobol' sampling of hundreds-to-thousands of candidate geometries — deterministic by seed — with a filter DSL (`eta_tt > 0.85 AND M_rel < 1.2`), parallel-coordinates view, and linked 3D geometry. |
+| **Design exploration** | Sobol' sampling of hundreds-to-thousands of candidate geometries — deterministic by seed — with a filter DSL (`eta_tt > 0.85 AND M_rel < 1.2`), parallel-coordinates view, and linked 3D geometry. Every candidate is gated through cited 5-axis manufacturability rules (cutter access, splitter passage, edge thickness, wrap angle): only designs a standard machining cell can physically produce are promoted to `VALID`; the rest plot greyed-out at their real solved performance with the violated rules named. Per-project rule overrides loosen the gate for better-equipped shops. |
 | **Candidate → cycle handoff** | Pick a candidate, **Send to cycle**: its geometry lands on the cycle's compressor component. Flip that component to *Live mean-line* and the next run solves with the geometry's mean-line efficiency instead of an assumed constant — and the result panel reports exactly where every efficiency number came from. |
 | **Performance maps** | Map generator with surge and choke lines and an explicit per-point status code — never an ambiguous `-1`. |
 | **Rotor dynamics** | Linear Timoshenko beam-FEM with gyroscopic coupling — lateral *and* torsional: critical-speed map, unbalance response (Bode, amplification factor, separation margin), Campbell, stability. |

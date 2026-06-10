@@ -13,15 +13,19 @@ import {
   PerspectiveCamera,
 } from "@react-three/drei";
 import * as THREE from "three";
-import { Download, Box, Layers, Scissors, Sun, Wand2 } from "lucide-react";
+import { Download, Box, Layers, Scissors, Spline, Sun, Wand2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useQuery } from "@tanstack/react-query";
 import { useFlowPathStore } from "@/lib/flowpath/store";
-import { useGltfStream } from "@/lib/three/gltf-loader";
+import {
+  useGltfStream,
+  type UseGltfStreamResult,
+} from "@/lib/three/gltf-loader";
 import {
   createProceduralImpeller,
   disposeGroup,
@@ -32,10 +36,13 @@ import {
   cadHealth,
   downloadUrl,
   geometryUrl,
+  getMergedGeometry,
   type DownloadFormat,
+  type MergedGeometry,
 } from "@/lib/api/flowpath";
 import { fmtNumber, cn } from "@/lib/utils";
 import { CanvasErrorBoundary } from "@/components/three/canvas-error-boundary";
+import { MeridionalView } from "@/components/flowpath/meridional-view";
 
 // Three.js Canvas must be client-only — it touches `window`/`document`
 // inside its constructor. Rendering an empty placeholder during SSR keeps
@@ -78,9 +85,14 @@ interface ImpellerViewerViewProps {
 /**
  * Prop-driven 3D viewer (U8). Viewer *settings* (display mode, shading,
  * HUD) stay in the persisted store — they are user preferences shared
- * across surfaces — but the candidate itself arrives via props. Stub-mesh
- * header handling is preserved: `useGltfStream` reads `X-Cascade-Stub` and
- * the procedural placeholder fills in while (or when) no real mesh exists.
+ * across surfaces — but the candidate itself arrives via props.
+ *
+ * The glTF stream lives HERE (not in the scene) so the host can render
+ * honesty affordances: a stub badge when the server tags the mesh
+ * `X-Cascade-Stub: true`, an error overlay when generation fails, and a
+ * download gate while either is the case. The mesh loads progressively —
+ * STANDARD LOD first (~200 ms server-side), upgraded to HIGH once the
+ * first mesh is on screen; the existing crossfade makes the swap seamless.
  */
 export function ImpellerViewerView({
   candidateId,
@@ -92,12 +104,68 @@ export function ImpellerViewerView({
   const setDisplayMode = useFlowPathStore((s) => s.setDisplayMode);
   const setShading = useFlowPathStore((s) => s.setShading);
   const showHud = useFlowPathStore((s) => s.showHud);
+  const setMeshStubbed = useFlowPathStore((s) => s.setMeshStubbed);
   const { resolvedTheme } = useTheme();
 
   const pickedId = candidateId;
   const pickedCandidate = candidate;
 
-  const url = pickedId ? geometryUrl(pickedId, "standard") : null;
+  // Progressive LOD: request "standard" on pick, swap the URL to "high"
+  // once the standard mesh has rendered (skipped while stubbed).
+  const baseUrl = pickedId ? geometryUrl(pickedId, "standard") : null;
+  const highUrl = pickedId ? geometryUrl(pickedId, "high") : null;
+  const [meshUrl, setMeshUrl] = useState<string | null>(baseUrl);
+  useEffect(() => {
+    setMeshUrl(baseUrl);
+  }, [baseUrl]);
+
+  const stream = useGltfStream(meshUrl);
+  const { current, loading, error, crossfade } = stream;
+
+  // Upgrade only AFTER the standard mesh's crossfade has finished: swapping
+  // the URL mid-fade cancels the fade animation and leaves the PREVIOUS
+  // candidate's mesh at full opacity under this candidate's HUD for the
+  // whole high-LOD generation (~1 s) — the exact stale-mesh dishonesty
+  // this viewer is built to prevent.
+  useEffect(() => {
+    if (
+      current &&
+      current.url === baseUrl &&
+      !current.isStub &&
+      highUrl &&
+      crossfade >= 1
+    ) {
+      setMeshUrl(highUrl);
+    }
+  }, [current, baseUrl, highUrl, crossfade]);
+
+  // Mirror the stub state into the store so download strips (including
+  // the detail page's own strip) can refuse placeholder downloads.
+  const isStub = current?.isStub ?? false;
+  useEffect(() => {
+    setMeshStubbed(isStub);
+    return () => setMeshStubbed(false);
+  }, [isStub, setMeshStubbed]);
+
+  // Merged geometry — the same normative merge the server meshes from.
+  // Feeds the HUD's r2/b2/U_tip and the meridional view, so the numbers
+  // and contours describe the wheel on screen (the candidate params alone
+  // don't carry rpm or the scaled geometry).
+  const projectId = pickedCandidate?.project_id ?? null;
+  const { data: mergedGeometry } = useQuery({
+    queryKey: ["merged-geometry", pickedId, projectId],
+    queryFn: () => getMergedGeometry(pickedId!, projectId!),
+    enabled: Boolean(pickedId && projectId),
+    staleTime: Infinity,
+  });
+
+  // 3D vs 2D meridional — the page is named "Flow path"; the r–z contour
+  // is the view engineers actually judge one by.
+  const [viewKind, setViewKind] = useState<"3d" | "meridional">("3d");
+  const meridionalAvailable = Boolean(
+    mergedGeometry && (mergedGeometry.meridional?.hub?.length ?? 0) > 1,
+  );
+  const showMeridional = viewKind === "meridional" && meridionalAvailable;
 
   return (
     <div className="flex h-full flex-col">
@@ -106,30 +174,52 @@ export function ImpellerViewerView({
         shading={shading}
         setDisplayMode={setDisplayMode}
         setShading={setShading}
+        viewKind={viewKind}
+        setViewKind={setViewKind}
+        meridionalAvailable={meridionalAvailable}
       />
       <div className="relative flex-1 overflow-hidden">
-        <CanvasErrorBoundary fallback={<CanvasFallback />}>
-          <Canvas
-            gl={{ antialias: true, alpha: true }}
-            aria-label="Impeller 3D viewer canvas — drag to orbit, scroll to zoom."
-            dpr={[1, 2]}
-            className="bg-background"
-          >
-            <ImpellerScene
-              url={url}
-              displayMode={displayMode}
-              shading={shading}
-              theme={resolvedTheme}
-              candidate={pickedCandidate}
-            />
-          </Canvas>
-        </CanvasErrorBoundary>
+        {showMeridional && mergedGeometry ? (
+          <MeridionalView merged={mergedGeometry} />
+        ) : (
+          <CanvasErrorBoundary fallback={<CanvasFallback />}>
+            <Canvas
+              gl={{ antialias: true, alpha: true }}
+              aria-label="Impeller 3D viewer canvas — drag to orbit, scroll to zoom."
+              dpr={[1, 2]}
+              className="bg-background"
+            >
+              <ImpellerScene
+                stream={stream}
+                displayMode={displayMode}
+                shading={shading}
+                theme={resolvedTheme}
+                candidate={pickedCandidate}
+              />
+            </Canvas>
+          </CanvasErrorBoundary>
+        )}
 
         {showHud && pickedCandidate && (
-          <Hud candidate={pickedCandidate} />
+          <Hud candidate={pickedCandidate} merged={mergedGeometry ?? null} />
         )}
 
         {!pickedId && <EmptyOverlay />}
+
+        {pickedId && !showMeridional && isStub && (
+          <StatusOverlay tone="warning">
+            Placeholder geometry — the server mesh module is unavailable.
+            The mean-line numbers are computed independently and are
+            unaffected; downloads are disabled until real geometry is
+            served.
+          </StatusOverlay>
+        )}
+
+        {pickedId && !showMeridional && error && !loading && !isStub && (
+          <StatusOverlay tone="error">
+            Geometry generation failed for this candidate: {error.message}
+          </StatusOverlay>
+        )}
 
         <a
           aria-label="Canvas accessibility note"
@@ -139,6 +229,10 @@ export function ImpellerViewerView({
           above the canvas to swap render modes; the gizmo in the bottom
           right indicates orientation.
         </a>
+      </div>
+      <div className="border-t border-border-subtle bg-surface-subtle/30 px-2 py-1 text-[10px] text-text-muted">
+        Preliminary geometry — canonical hub/shroud profiles, fixed blade
+        thickness, no fillets or lean (KG-G-01…04, KG-G-09).
       </div>
       {!hideDownloads && <DownloadStrip pickedId={pickedId} />}
     </div>
@@ -150,15 +244,15 @@ export function ImpellerViewerView({
 // ---------------------------------------------------------------------------
 
 interface SceneProps {
-  url: string | null;
+  stream: UseGltfStreamResult;
   displayMode: "solid" | "wireframe" | "section";
   shading: "photoreal" | "linedrawing";
   theme: string | undefined;
   candidate: import("@/lib/api/flowpath").ServerCandidate | null;
 }
 
-function ImpellerScene({ url, displayMode, shading, theme, candidate }: SceneProps) {
-  const { current, previous, loading, crossfade } = useGltfStream(url);
+function ImpellerScene({ stream, displayMode, shading, theme, candidate }: SceneProps) {
+  const { current, previous, loading, crossfade } = stream;
   // The clipping plane is a long-lived THREE.Plane that we MUTATE in place
   // each frame (see useSectionPlaneRef below). We must not put its sweep
   // value in React state — doing so re-renders this whole subtree 60 ×/s
@@ -250,7 +344,7 @@ function ImpellerScene({ url, displayMode, shading, theme, candidate }: ScenePro
         />
       )}
 
-      {loading && proceduralRef.current && (
+      {loading && !current && proceduralRef.current && (
         <SceneObject
           group={proceduralRef.current}
           displayMode="wireframe"
@@ -374,9 +468,20 @@ function useSectionPlaneRef(
 
 function Hud({
   candidate,
+  merged,
 }: {
   candidate: import("@/lib/api/flowpath").ServerCandidate;
+  merged: MergedGeometry | null;
 }) {
+  // r2 / b2 / U_tip come from the merged geometry — the same normative
+  // merge the server meshes from — so the HUD describes the wheel on
+  // screen. Until the merge arrives, show a placeholder rather than
+  // fabricating values from keys the candidate doesn't carry.
+  const r2 = merged?.geometry_params.impeller_outlet_radius ?? null;
+  const b2 = merged?.geometry_params.blade_height_outlet ?? null;
+  const rpm = merged?.meanline_rpm_rpm ?? null;
+  const uTip =
+    r2 !== null && rpm !== null ? (2 * Math.PI * rpm * r2) / 60 : null;
   return (
     <div
       className="absolute right-3 top-3 z-10 rounded-md border border-border-subtle bg-surface-raised/90 px-3 py-2 text-xs shadow-z2 backdrop-blur"
@@ -392,15 +497,16 @@ function Hud({
           <HudRow label="η_ts" value={fmtNumber(candidate.objectives.eta_ts ?? 0, { decimals: 4 })} />
           <HudRow label="M_rel" value={fmtNumber(candidate.objectives.M_rel ?? 0, { decimals: 3 })} />
           <HudRow
+            label="r₂"
+            value={r2 !== null ? `${fmtNumber(r2 * 1000, { decimals: 1 })} mm` : "—"}
+          />
+          <HudRow
+            label="b₂"
+            value={b2 !== null ? `${fmtNumber(b2 * 1000, { decimals: 2 })} mm` : "—"}
+          />
+          <HudRow
             label="U_tip"
-            value={`${fmtNumber(
-              ((candidate.params.rotor_outlet_radius as number) ?? 0) *
-                2 *
-                Math.PI *
-                ((candidate.params.omega_design as number) ?? 96000) /
-                60,
-              { decimals: 0 },
-            )} m/s`}
+            value={uTip !== null ? `${fmtNumber(uTip, { decimals: 0 })} m/s` : "—"}
           />
           <HudRow
             label="mass"
@@ -430,6 +536,9 @@ interface ViewerToolbarProps {
   shading: "photoreal" | "linedrawing";
   setDisplayMode: (m: "solid" | "wireframe" | "section") => void;
   setShading: (s: "photoreal" | "linedrawing") => void;
+  viewKind: "3d" | "meridional";
+  setViewKind: (v: "3d" | "meridional") => void;
+  meridionalAvailable: boolean;
 }
 
 function ViewerToolbar({
@@ -437,26 +546,49 @@ function ViewerToolbar({
   shading,
   setDisplayMode,
   setShading,
+  viewKind,
+  setViewKind,
+  meridionalAvailable,
 }: ViewerToolbarProps) {
+  const meridionalActive = viewKind === "meridional" && meridionalAvailable;
   return (
     <div className="flex items-center gap-1 border-b border-border-subtle bg-surface-subtle/30 px-2 py-1.5">
+      <ToggleGroupItem
+        label="3D"
+        icon={Box}
+        active={viewKind === "3d"}
+        onClick={() => setViewKind("3d")}
+      />
+      <ToggleGroupItem
+        label="Meridional"
+        icon={Spline}
+        active={meridionalActive}
+        onClick={() => setViewKind("meridional")}
+        disabled={!meridionalAvailable}
+      />
+
+      <span className="mx-1 h-4 w-px bg-border-subtle" aria-hidden />
+
       <ToggleGroupItem
         label="Solid"
         icon={Box}
         active={displayMode === "solid"}
         onClick={() => setDisplayMode("solid")}
+        disabled={meridionalActive}
       />
       <ToggleGroupItem
         label="Wireframe"
         icon={Layers}
         active={displayMode === "wireframe"}
         onClick={() => setDisplayMode("wireframe")}
+        disabled={meridionalActive}
       />
       <ToggleGroupItem
         label="Section"
         icon={Scissors}
         active={displayMode === "section"}
         onClick={() => setDisplayMode("section")}
+        disabled={meridionalActive}
       />
 
       <span className="mx-1 h-4 w-px bg-border-subtle" aria-hidden />
@@ -466,12 +598,14 @@ function ViewerToolbar({
         icon={Sun}
         active={shading === "photoreal"}
         onClick={() => setShading("photoreal")}
+        disabled={meridionalActive}
       />
       <ToggleGroupItem
         label="Line drawing"
         icon={Wand2}
         active={shading === "linedrawing"}
         onClick={() => setShading("linedrawing")}
+        disabled={meridionalActive}
       />
     </div>
   );
@@ -482,11 +616,13 @@ function ToggleGroupItem({
   icon: Icon,
   active,
   onClick,
+  disabled = false,
 }: {
   label: string;
   icon: React.ComponentType<{ className?: string }>;
   active: boolean;
   onClick: () => void;
+  disabled?: boolean;
 }) {
   return (
     <Tooltip>
@@ -494,6 +630,7 @@ function ToggleGroupItem({
         <button
           type="button"
           onClick={onClick}
+          disabled={disabled}
           aria-pressed={active}
           aria-label={label}
           className={cn(
@@ -501,6 +638,7 @@ function ToggleGroupItem({
             active
               ? "bg-brand-surface text-brand-text"
               : "text-text-muted hover:bg-surface-subtle hover:text-text",
+            disabled && "cursor-not-allowed opacity-40 hover:bg-transparent",
           )}
         >
           <Icon className="h-3 w-3" />
@@ -520,6 +658,10 @@ const CAD_UNAVAILABLE_TOOLTIP =
   "CAD export requires the cascade[cad] extra. " +
   "Install with: pip install 'cascade[cad]' or contact support.";
 
+const STUB_DOWNLOAD_TOOLTIP =
+  "Downloads disabled — the server is serving placeholder geometry, " +
+  "not this candidate's impeller.";
+
 export function DownloadStrip({ pickedId }: { pickedId: string | null }) {
   // W-19: Probe the /api/health/cad endpoint (richer than _cad/available)
   // so the UI can disable STEP/IGES buttons proactively and show the
@@ -531,6 +673,11 @@ export function DownloadStrip({ pickedId }: { pickedId: string | null }) {
     return () => ctrl.abort();
   }, []);
 
+  // While the viewer is showing a server stub, downloading would hand the
+  // user an empty/placeholder file under the candidate's name — refuse.
+  const meshStubbed = useFlowPathStore((s) => s.meshStubbed);
+  const stubReason = meshStubbed ? STUB_DOWNLOAD_TOOLTIP : undefined;
+
   const cadTooltip =
     cadAvailable === false ? CAD_UNAVAILABLE_TOOLTIP : undefined;
 
@@ -539,34 +686,51 @@ export function DownloadStrip({ pickedId }: { pickedId: string | null }) {
       className="flex items-center gap-1 border-t border-border-subtle bg-surface-subtle/30 px-2 py-1.5"
       aria-label="Download options for the picked candidate"
     >
-      <DownloadButton format="glb" pickedId={pickedId} label="glTF" />
-      <DownloadButton format="stl" pickedId={pickedId} label="STL" />
+      <DownloadButton
+        format="glb"
+        pickedId={pickedId}
+        label="glTF"
+        disabled={meshStubbed}
+        unavailableReason={stubReason}
+      />
+      <DownloadButton
+        format="stl"
+        pickedId={pickedId}
+        label="STL"
+        disabled={meshStubbed}
+        unavailableReason={stubReason}
+      />
       <DownloadButton
         format="step"
         pickedId={pickedId}
         label="STEP"
-        disabled={cadAvailable !== true}
-        unavailableReason={cadTooltip}
+        disabled={cadAvailable !== true || meshStubbed}
+        unavailableReason={stubReason ?? cadTooltip}
       />
       <DownloadButton
         format="iges"
         pickedId={pickedId}
         label="IGES"
-        disabled={cadAvailable !== true}
-        unavailableReason={cadTooltip}
+        disabled={cadAvailable !== true || meshStubbed}
+        unavailableReason={stubReason ?? cadTooltip}
       />
       <DownloadButton
         format="fluid.step"
         pickedId={pickedId}
         label="Fluid STEP"
-        disabled={cadAvailable !== true}
-        unavailableReason={cadAvailable === false ? CAD_UNAVAILABLE_TOOLTIP : undefined}
+        disabled={cadAvailable !== true || meshStubbed}
+        unavailableReason={
+          stubReason ??
+          (cadAvailable === false ? CAD_UNAVAILABLE_TOOLTIP : undefined)
+        }
         tooltip="Fluid passage volume with 8 named patches (FILE_DESCRIPTION; patch names in DESCRIPTION text, not PRODUCT_DEFINITION)"
       />
       <DownloadButton
         format="turbogrid.ndf"
         pickedId={pickedId}
         label="NDF"
+        disabled={meshStubbed}
+        unavailableReason={stubReason}
         tooltip="Hub, shroud, blade profiles in Ansys TurboGrid NDF format"
       />
       <span className="ml-auto text-[10px] text-text-muted">
@@ -714,6 +878,34 @@ function EmptyOverlay() {
           Click a point on the scatter to load that impeller geometry here.
         </p>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Honesty banner over the canvas: the viewer must never show a stub or a
+ * stale mesh as if it were the picked candidate's geometry without saying
+ * so (the silent-stub failure mode this replaces is the worst of both).
+ */
+function StatusOverlay({
+  tone,
+  children,
+}: {
+  tone: "warning" | "error";
+  children: React.ReactNode;
+}) {
+  return (
+    <div
+      className={cn(
+        "absolute left-3 top-3 z-10 max-w-xs rounded-md border px-3 py-2 text-xs shadow-z2 backdrop-blur",
+        tone === "warning"
+          ? "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300"
+          : "border-red-500/40 bg-red-500/10 text-red-700 dark:text-red-300",
+      )}
+      role="status"
+      aria-live="polite"
+    >
+      {children}
     </div>
   );
 }

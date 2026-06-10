@@ -37,7 +37,7 @@ for p in (str(_REPO / "src"), str(_REPO / "apps" / "api")):
 # ---------------------------------------------------------------------------
 
 
-def _make_sample(r2_m: float, blade_count: float = 14.0, tip_m: float = 2e-4) -> Dict[str, Any]:
+def _make_sample(r2_m: float, blade_count: float = 14.0, tip_m: float = 3e-4) -> Dict[str, Any]:
     """Build a minimal Sobol'-sample dict (plain floats, no Quantity wrappers)."""
     return {
         "rotor_outlet_radius": r2_m,
@@ -46,7 +46,7 @@ def _make_sample(r2_m: float, blade_count: float = 14.0, tip_m: float = 2e-4) ->
     }
 
 
-def _make_quantity_sample(r2_m: float, blade_count: float = 14.0, tip_m: float = 2e-4):
+def _make_quantity_sample(r2_m: float, blade_count: float = 14.0, tip_m: float = 3e-4):
     """Build a Sobol'-sample dict with Quantity objects (as SobolSampler produces)."""
     from cascade.units import Q
     return {
@@ -128,11 +128,14 @@ def invalid_geometry_result():
 @pytest.mark.spec_parity("SPEC-8")
 def test_valid_result_status(valid_result_small):
     """SPEC-8: Design exploration (Sobol sampling) returns real solver results.
-    The evaluator should return VALID or REGIME_OUT_OF_VALIDITY (never crash).
+    The evaluator returns a SPEC §13 status (never crashes).
     """
-    assert valid_result_small["status"] in ("VALID", "REGIME_OUT_OF_VALIDITY", "NON_CONVERGED"), (
-        f"Unexpected status: {valid_result_small['status']}"
-    )
+    assert valid_result_small["status"] in (
+        "VALID",
+        "MANUFACTURABILITY_FAILED",
+        "REGIME_OUT_OF_VALIDITY",
+        "NON_CONVERGED",
+    ), f"Unexpected status: {valid_result_small['status']}"
 
 
 def test_valid_small_eta_tt_in_physical_range(valid_result_small):

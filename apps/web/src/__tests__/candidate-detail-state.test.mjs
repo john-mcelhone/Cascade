@@ -55,6 +55,15 @@ function objectiveDisplay(key, value, status, decimals = 4) {
 
 function handoffDisabledReason({ candidate, hasCompressor }) {
   if (!candidate) return "Candidate not loaded.";
+  if (candidate.status === "MANUFACTURABILITY_FAILED") {
+    // The design point solved fine — the geometry just can't be made.
+    return (
+      "This candidate cannot be produced on a standard 5-axis machining " +
+      "cell — an unmakeable geometry cannot honestly drive the cycle " +
+      "co-simulation. Loosen the manufacturability overrides and re-run " +
+      "the exploration to reconsider it."
+    );
+  }
   if (candidate.status !== "VALID") {
     return (
       "This candidate's own design point refused " +
@@ -282,6 +291,15 @@ assert.match(
 assert.match(
   handoffDisabledReason({ candidate: CAND, hasCompressor: false }),
   /no Compressor component/,
+);
+// MANUFACTURABILITY_FAILED solved fine — the reason must say "can't be
+// made", not "design point refused".
+assert.match(
+  handoffDisabledReason({
+    candidate: { ...CAND, status: "MANUFACTURABILITY_FAILED" },
+    hasCompressor: true,
+  }),
+  /standard 5-axis machining/,
 );
 assert.match(
   handoffDisabledReason({ candidate: null, hasCompressor: true }),

@@ -267,6 +267,11 @@ class MergedGeometryResponse(BaseModel):
     # (the rest are r2-scaled / reference defaults).
     sampled_keys: List[str] = Field(default_factory=list)
     meanline_rpm_rpm: float
+    # Meridional (z, r) polylines in metres, sampled from the SAME hub /
+    # shroud B-splines the mesh generator and the vendor exports use —
+    # named-contour dict: {"hub": [[z, r], ...], "shroud": [[z, r], ...]}.
+    # Empty when cascade.geometry is unavailable (dev mode).
+    meridional: Dict[str, List[List[float]]] = Field(default_factory=dict)
 
 
 class SendToCycleRequest(BaseModel):

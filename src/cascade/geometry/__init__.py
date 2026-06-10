@@ -61,8 +61,9 @@ __all__ = [
     "export_iges",
     # W-17 — fluid-volume STEP with named patches.
     "export_fluid_volume_step",
-    # Candidate-export helpers — used by the API router to serve
-    # real geometry from candidate parameter dicts.
+    # Parameter-dict export helpers — library/scripting convenience
+    # (raw keys + defaults). The API routers build geometry through the
+    # normative candidate merge instead.
     "generate_impeller_glb",
     "generate_impeller_stl",
 ]
@@ -165,15 +166,16 @@ def rotor_shaft_mesh(
 
 
 # ---------------------------------------------------------------------------
-# Candidate-export helpers
+# Parameter-dict export helpers
 # ---------------------------------------------------------------------------
-# These two functions are called by the API router
-# (`apps/api/routers/candidates.py`) to serve real geometry for a candidate
-# identified by its parameter dict.  They are the canonical bridge between
-# the design-space parameter representation and the geometry serialisation
-# formats consumed by the browser preview and the production export endpoints.
+# Library-level convenience wrappers: build an impeller mesh straight from a
+# raw parameter dict (geometry field names, missing keys → AT-100 defaults)
+# and serialise it. Scripting/notebook use. The API routers do NOT use
+# these — they build geometry through the normative candidate merge
+# (`apps/api/routers/_meanline_geom.build_cc_geometry`) so served meshes
+# match the candidate's mean-line numbers.
 #
-# LOD mapping from the router's string keys to MeshLOD enum values:
+# LOD mapping from string keys to MeshLOD enum values:
 _LOD_STRING_MAP: dict = {
     "low": MeshLOD.PREVIEW,
     "preview": MeshLOD.PREVIEW,
@@ -192,9 +194,10 @@ def generate_impeller_glb(
     """Generate a GLB byte string for a centrifugal impeller from a parameter
     dict.
 
-    This is the production geometry path used by the candidate-export API
-    endpoints.  It calls the full mesh generator at the requested LOD and
-    serialises to glTF binary.
+    Library/scripting convenience: calls the full mesh generator at the
+    requested LOD and serialises to glTF binary. Missing keys fall back to
+    canonical defaults — for candidate-faithful geometry use the API
+    routers' normative merge instead.
 
     Args:
         params: a dict of impeller design-space parameters.  Any missing

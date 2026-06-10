@@ -121,11 +121,16 @@ export default function CandidateDetailPage({ params }: PageProps) {
       ? outcome.candidate
       : null;
   const isValid = candidate?.status === "VALID";
+  // MANUFACTURABILITY_FAILED solved fine and its merged geometry is
+  // well-defined — show it (the user needs to SEE the un-millable
+  // passage); only handoff and exports stay VALID-gated.
+  const geometryWellDefined =
+    isValid || candidate?.status === "MANUFACTURABILITY_FAILED";
 
   const mergedQuery = useQuery({
     queryKey: ["candidate-merged-geometry", candidateId, id],
     queryFn: () => getMergedGeometry(candidateId, id),
-    enabled: Boolean(candidate) && isValid,
+    enabled: Boolean(candidate) && geometryWellDefined,
     retry: false,
   });
 
@@ -308,6 +313,11 @@ export default function CandidateDetailPage({ params }: PageProps) {
             </Badge>
           )}
         </div>
+        {candidate && !isValid && candidate.error_message && (
+          <p className="mt-1 text-xs text-text-muted" role="note">
+            {candidate.error_message}
+          </p>
+        )}
       </div>
 
       <div className="flex flex-1 overflow-hidden">
@@ -392,7 +402,7 @@ export default function CandidateDetailPage({ params }: PageProps) {
                 stale={state === "stale"}
               />
               <ObjectivesSection candidate={candidate} />
-              {isValid ? (
+              {geometryWellDefined ? (
                 <MergedParamsSection
                   merged={mergedQuery.data ?? null}
                   loading={mergedQuery.isLoading}
@@ -435,7 +445,7 @@ export default function CandidateDetailPage({ params }: PageProps) {
           className="hidden w-[360px] shrink-0 border-l border-border-subtle lg:block"
           aria-label="Impeller 3D viewer"
         >
-          {isValid || !candidate ? (
+          {geometryWellDefined || !candidate ? (
             <ImpellerViewerView
               candidateId={candidate ? candidateId : null}
               candidate={candidate}

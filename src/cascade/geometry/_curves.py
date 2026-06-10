@@ -113,34 +113,61 @@ def default_shroud_control_points(
     z_axial: float,
     tip_clearance: float,
     *,
+    blade_height_radial: float,
     flow: str = "centrifugal",
 ) -> np.ndarray:
     """Generate canonical control points for an impeller shroud curve.
 
-    The shroud is offset from the blade tip by ``tip_clearance``. For an
-    unshrouded (open) impeller the "shroud" in this mesh generator is the
-    virtual casing surface; for a shrouded impeller the curve is the
-    actual shroud disc.
+    ``blade_height_radial`` is the design passage height at the *radial*
+    end of the channel — ``blade_height_outlet`` (b2) for a centrifugal
+    compressor trailing edge, ``blade_height_inlet`` (b1) for a radial
+    inflow turbine leading edge. At a radial station the meridional
+    direction is radial, so both the passage height and the tip-clearance
+    offset are *axial*: the shroud ends at full radius ``r_outlet`` with
+    its z offset from the hub exit plane by ``blade_height_radial +
+    tip_clearance``. (At the axial end of an RIT channel the passage
+    height is radial and already enters via the hub/shroud radii; there
+    the radial ``tip_clearance`` subtraction is the correct convention.)
+
+    For an unshrouded (open) impeller the "shroud" in this mesh generator
+    is the virtual casing surface; for a shrouded impeller the curve is
+    the actual shroud disc. Blades loft all the way to this curve, so the
+    rendered passage at the radial end is ``blade_height_radial +
+    tip_clearance`` (no discrete tip gap is modeled — see KG-G-05).
     """
+    z_rad = z_axial - (blade_height_radial + tip_clearance)
+    # 5% floor, not just > 0: a shroud compressed into a sliver of the
+    # axial span produces a near-vertical spline with wild interpolants —
+    # fail loudly instead of lofting garbage blades.
+    if z_rad <= 0.05 * z_axial:
+        raise ValueError(
+            f"blade_height_radial + tip_clearance "
+            f"({blade_height_radial + tip_clearance:.4g}) leaves under 5% "
+            f"of the meridional axial length ({z_axial:.4g}); degenerate "
+            f"shroud curve"
+        )
     r_in_eff = r_inlet
-    r_out_eff = r_outlet - tip_clearance
     if flow == "centrifugal":
+        # Interior z-fractions scale by z_rad (not z_axial): with b2 up to
+        # ~26 mm, 0.90*z_axial could exceed z_rad and fold the spline back.
         return np.array(
             [
                 [0.0, r_in_eff],
-                [0.30 * z_axial, r_in_eff * 1.10],
-                [0.65 * z_axial, 0.45 * (r_in_eff + r_out_eff)],
-                [0.90 * z_axial, 0.92 * r_out_eff],
-                [z_axial - tip_clearance, r_out_eff],
+                [0.30 * z_rad, r_in_eff * 1.10],
+                [0.65 * z_rad, 0.45 * (r_in_eff + r_outlet)],
+                [0.90 * z_rad, 0.92 * r_outlet],
+                [z_rad, r_outlet],
             ]
         )
-    # radial inflow turbine: mirror.
+    # radial inflow turbine: mirror — the radial end is the INLET. The
+    # exducer (axial end) keeps the radial clearance subtraction.
+    r_out_eff = r_outlet - tip_clearance
     return np.array(
         [
-            [z_axial - tip_clearance, r_in_eff],
-            [0.70 * z_axial, r_in_eff * 0.92],
-            [0.35 * z_axial, 0.45 * (r_in_eff + r_out_eff)],
-            [0.10 * z_axial, 0.92 * r_out_eff],
+            [z_rad, r_in_eff],
+            [0.70 * z_rad, r_in_eff * 0.92],
+            [0.35 * z_rad, 0.45 * (r_in_eff + r_out_eff)],
+            [0.10 * z_rad, 0.92 * r_out_eff],
             [0.0, r_out_eff],
         ]
     )

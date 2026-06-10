@@ -197,6 +197,7 @@ def _meridional_curves_from_geometry(
         tip_clr = geometry.tip_clearance
         flow = "centrifugal"
         r_out_shroud = r_out
+        blade_height_radial = geometry.blade_height_outlet
     elif isinstance(geometry, RadialTurbineGeometry):
         z_axial = 0.5 * geometry.rotor_inlet_radius
         r_in_hub = geometry.rotor_inlet_radius
@@ -205,6 +206,7 @@ def _meridional_curves_from_geometry(
         r_out_shroud = geometry.rotor_outlet_radius_tip
         tip_clr = geometry.tip_clearance
         flow = "radial"
+        blade_height_radial = geometry.blade_height_inlet
     else:
         msg = (
             f"_meridional_curves_from_geometry: expected a "
@@ -221,6 +223,7 @@ def _meridional_curves_from_geometry(
         r_outlet=r_out_shroud,
         z_axial=z_axial,
         tip_clearance=tip_clr,
+        blade_height_radial=blade_height_radial,
         flow=flow,
     )
     z_hub, r_hub = cubic_bspline_curve(hub_ctrl, n_samples)
@@ -917,8 +920,12 @@ def _build_fluid_volume_occ(
 
     1. Hub surface-of-revolution (full sector wedge, not just the profile).
     2. Shroud surface-of-revolution at tip radius.
-    3. Inlet axial cap (upstream face).
-    4. Outlet axial cap (downstream / radial-exit face).
+    3. Inlet cap: flat annulus at the axial eye (CC) or cylindrical band
+       at the radial rotor LE (RIT) — at a radial station hub and shroud
+       terminate at the same radius but different z (passage height is
+       axial there), so the cap is a band, not a zero-area annulus.
+    4. Outlet cap: cylindrical band at the radial exit (CC) or flat
+       annulus at the axial exducer (RIT).
     5. Two periodic cut planes (one blade pitch, θ=0 and θ=2π/Z).
     6. One blade-camber surface (suction side) and one (pressure side).
 
@@ -970,21 +977,25 @@ def _build_fluid_volume_occ(
         r_in_hub = geometry.inducer_hub_radius
         r_in_tip = geometry.inducer_tip_radius
         r_out = geometry.impeller_outlet_radius
+        r_out_shroud = geometry.impeller_outlet_radius
         tip_clr = geometry.tip_clearance
         blade_count = geometry.blade_count
         beta_le = math.radians(60.0)
         beta_te = geometry.beta_2_metal_rad
         flow = "centrifugal"
+        blade_height_radial = geometry.blade_height_outlet
     elif isinstance(geometry, RadialTurbineGeometry):
         z_axial = 0.5 * geometry.rotor_inlet_radius
         r_in_hub = geometry.rotor_inlet_radius
         r_in_tip = geometry.rotor_inlet_radius
         r_out = geometry.rotor_outlet_radius_hub
+        r_out_shroud = geometry.rotor_outlet_radius_tip
         tip_clr = geometry.tip_clearance
         blade_count = geometry.blade_count
         beta_le = geometry.inlet_metal_angle_rad
         beta_te = geometry.exducer_angle_rad
         flow = "radial"
+        blade_height_radial = geometry.blade_height_inlet
     else:
         raise TypeError(
             f"_build_fluid_volume_occ: unsupported geometry type "
@@ -996,8 +1007,9 @@ def _build_fluid_volume_occ(
         r_inlet=r_in_hub, r_outlet=r_out, z_axial=z_axial, flow=flow,
     )
     shroud_ctrl = default_shroud_control_points(
-        r_inlet=r_in_tip, r_outlet=r_out, z_axial=z_axial,
-        tip_clearance=tip_clr, flow=flow,
+        r_inlet=r_in_tip, r_outlet=r_out_shroud, z_axial=z_axial,
+        tip_clearance=tip_clr, blade_height_radial=blade_height_radial,
+        flow=flow,
     )
     z_hub_pts, r_hub_pts = cubic_bspline_curve(hub_ctrl, n_meridional)
     z_sh_pts, r_sh_pts = cubic_bspline_curve(shroud_ctrl, n_meridional)
@@ -1052,6 +1064,36 @@ def _build_fluid_volume_occ(
         sewing.Perform()
         return sewing.SewedShape()
 
+    # --- Helper: build a cylindrical band cap at constant radius
+    def _cylindrical_band_cap(r_val, z_a, z_b, theta_a, theta_b, n_circ=16):
+        """Cylindrical cap at radius r_val spanning z in [z_a, z_b].
+
+        Used at the *radial* end of the channel (centrifugal exit, RIT
+        inlet), where hub and shroud terminate at the same radius but
+        different z — a flat annular cap would have zero area there.
+        Winding is chosen so face normals point outward (+r, away from
+        the fluid), consistent with the flipped shroud shell.
+        """
+        sewing = BRepBuilderAPI_Sewing(1e-7)
+        theta_arr = np.linspace(theta_a, theta_b, n_circ + 1)
+        for i in range(n_circ):
+            pts = [
+                gp_Pnt(r_val * math.cos(theta_arr[i]),
+                       r_val * math.sin(theta_arr[i]), z_a),
+                gp_Pnt(r_val * math.cos(theta_arr[i+1]),
+                       r_val * math.sin(theta_arr[i+1]), z_a),
+                gp_Pnt(r_val * math.cos(theta_arr[i+1]),
+                       r_val * math.sin(theta_arr[i+1]), z_b),
+                gp_Pnt(r_val * math.cos(theta_arr[i]),
+                       r_val * math.sin(theta_arr[i]), z_b),
+            ]
+            poly = BRepBuilderAPI_MakePolygon(pts[0], pts[1], pts[2], pts[3], True)
+            face_maker = BRepBuilderAPI_MakeFace(poly.Wire())
+            if face_maker.IsDone():
+                sewing.Add(face_maker.Face())
+        sewing.Perform()
+        return sewing.SewedShape()
+
     # --- Helper: build a flat meridional sector slice (periodic cut plane)
     def _meridional_plane(z_arr, r_arr, theta, n_pts=None):
         """Flat meridional face at angle theta, bounded by hub and shroud curves."""
@@ -1095,15 +1137,30 @@ def _build_fluid_volume_occ(
     # SHROUD: shroud meridional surface swept through one pitch
     shroud_shape = _ruled_shell(z_sh_pts, r_sh_pts, theta_0, theta_1, flip=True)
 
-    # INLET: inlet cap at z=z_hub_pts[0] (axial), from r_hub[0] to r_sh[0]
-    inlet_shape = _planar_annular_cap(
-        z_hub_pts[0], r_hub_pts[0], r_sh_pts[0], theta_0, theta_1, n_circ_cap,
-    )
-
-    # OUTLET: outlet cap at z=z_hub_pts[-1] (radial exit), from r_hub[-1] to r_sh[-1]
-    outlet_shape = _planar_annular_cap(
-        z_hub_pts[-1], r_hub_pts[-1], r_sh_pts[-1], theta_0, theta_1, n_circ_cap,
-    )
+    # At the RADIAL end of the channel hub and shroud terminate at the same
+    # radius but different z (the passage height is axial there), so the cap
+    # is a cylindrical band. At the AXIAL end hub and shroud share a z plane
+    # and the cap is a flat annulus.
+    if flow == "centrifugal":
+        # INLET: axial eye at z=0, flat annulus from r_hub[0] to r_sh[0].
+        inlet_shape = _planar_annular_cap(
+            z_hub_pts[0], r_hub_pts[0], r_sh_pts[0], theta_0, theta_1, n_circ_cap,
+        )
+        # OUTLET: radial exit at r=r_out — cylindrical band spanning the
+        # exit passage height (z_sh[-1] .. z_hub[-1]).
+        outlet_shape = _cylindrical_band_cap(
+            r_hub_pts[-1], z_sh_pts[-1], z_hub_pts[-1], theta_0, theta_1, n_circ_cap,
+        )
+    else:
+        # INLET: radial rotor LE at r=r_inlet — cylindrical band spanning
+        # the inlet passage height (z_sh[0] .. z_hub[0]).
+        inlet_shape = _cylindrical_band_cap(
+            r_hub_pts[0], z_sh_pts[0], z_hub_pts[0], theta_0, theta_1, n_circ_cap,
+        )
+        # OUTLET: axial exducer at z=0, flat annulus from r_hub[-1] to r_sh[-1].
+        outlet_shape = _planar_annular_cap(
+            z_hub_pts[-1], r_hub_pts[-1], r_sh_pts[-1], theta_0, theta_1, n_circ_cap,
+        )
 
     # PERIODIC_1: meridional face at theta=0
     periodic_1_shape = _meridional_plane(z_hub_pts, r_hub_pts, theta_0, n_meridional)
@@ -1289,8 +1346,10 @@ def export_fluid_volume_step(
     - Hub surface (inner radial wall)
     - Shroud surface (outer casing wall)
     - Blade pressure and suction surfaces
-    - Inlet axial plane (upstream boundary)
-    - Outlet axial / radial-exit plane (downstream boundary)
+    - Inlet boundary (axial-eye annulus for a CC; radial-LE cylindrical
+      band for an RIT)
+    - Outlet boundary (radial-exit cylindrical band for a CC; axial
+      exducer annulus for an RIT)
     - Two congruent periodic cut planes (one blade pitch, for cyclic BC)
 
     This eliminates 2-4 hours of SpaceClaim preprocessing that CFD engineers

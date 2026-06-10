@@ -137,13 +137,16 @@ export const DEFAULT_PARAMETERS: ParameterDef[] = [
     unit: "mm",
     kind: "geometry",
     group: "Tip",
-    value: 0.25,
-    min: 0.1,
+    value: 0.3,
+    min: 0.25,
     max: 0.5,
     step: 0.01,
     frozen: false,
     description: "Axial tip clearance.",
-    regimeHint: "Whitfield-Baines tip-clearance loss valid τ/h ≤ 0.05.",
+    regimeHint:
+      "Whitfield-Baines tip-clearance loss valid τ/h ≤ 0.05. Floor " +
+      "0.25 mm = manufacturable cold clearance (Boyce §3.4); below it " +
+      "candidates fail the 5-axis manufacturability gate.",
   },
   {
     id: "outlet_blade_angle",

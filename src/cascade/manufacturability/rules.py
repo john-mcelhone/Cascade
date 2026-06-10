@@ -22,6 +22,28 @@ References
 - ANSI/ASME B89.6.2 + shop convention — wrap angle beyond 90° is rare and
   requires a 5-axis swarf cut against a slender tool; we floor at the
   conventional 90° envelope. (Pure microturbine rotors run 70–85°.)
+
+Severity semantics
+------------------
+``error``  — a standard 5-axis machining cell cannot produce the feature
+             (tool access, edge thickness below what a cutter leaves
+             standing, wrap beyond the conventional envelope). These gate
+             the design-space sweep: violating candidates are statused
+             ``MANUFACTURABILITY_FAILED`` (SPEC §13).
+``warning`` — shop-practice / assembly envelope (tip clearance, aspect
+             ratio, fillet convention). Also gate the sweep by default,
+             but represent practice rather than physical impossibility.
+Per-project overrides (``settings.manufacturability_overrides``) loosen
+either tier for shops with better-than-standard capability.
+
+Thickness floors are shared with the mesh generators via
+``manufacturability.limits`` — the geometry Cascade produces is floored to
+the machinable minimum BY CONSTRUCTION, so the LE/TE rules only fire when
+an explicit (user-supplied) thickness undercuts the floor. The splitter
+passage rule reflects the generated geometry's always-present splitter row
+(one per main blade, half pitch, from 50 % chord) — for the default design
+space it is the binding tool-access passage, tighter than the inducer
+throat.
 """
 
 from __future__ import annotations
@@ -84,15 +106,20 @@ def _impeller_blade_thickness_max_m(geometry) -> float:  # noqa: ANN001
     """The peak (mid-chord) blade thickness used by the mesh generator.
 
     Mirrors ``cascade.geometry.impeller._build_single_blade``: 1.5 % of the
-    impeller exit radius. Centralised here so the manufacturability check
-    and the mesh stay in step.
+    impeller exit radius, floored at the 5-axis milling minimum (both sides
+    read ``manufacturability.limits.machinable_blade_peak_thickness_m`` so
+    the manufacturability check and the mesh stay in step).
     """
+    from cascade.manufacturability.limits import (
+        machinable_blade_peak_thickness_m,
+    )
+
     # Optional explicit override on the geometry — added by future revisions
     # of CentrifugalCompressorGeometry once a blade-thickness field exists.
     explicit = getattr(geometry, "blade_thickness_max", None)
     if explicit is not None:
         return float(explicit)
-    return 0.015 * float(geometry.impeller_outlet_radius)
+    return machinable_blade_peak_thickness_m(geometry.impeller_outlet_radius)
 
 
 def _impeller_le_thickness_m(geometry) -> float:  # noqa: ANN001
@@ -147,6 +174,31 @@ def _impeller_throat_width_m(geometry) -> float:  # noqa: ANN001
     # this manufacturability check the pitch–thickness form is the more
     # conservative and the one the shop quotes against.).
     return max(0.0, pitch_m - t_blade)
+
+
+def _impeller_splitter_passage_m(geometry) -> float:  # noqa: ANN001
+    """Approximate main-to-splitter passage width at the splitter LE.
+
+    Cascade's mesh generator emits one splitter per main blade at half
+    pitch, starting at 50 % meridional chord. The passage a cutter must
+    finish there is HALF the main-blade pitch minus one blade thickness,
+    evaluated at the 50 %-chord radius — for the swept design space this
+    is tighter than the inducer throat and is the binding tool-access
+    passage. Radius at 50 % chord is approximated as the mean of the
+    inducer mean radius and the exit radius (the hub turns smoothly from
+    axial to radial across the chord).
+    """
+    Z = float(geometry.blade_count)
+    if Z <= 0:
+        return 0.0
+    r_50 = 0.5 * (
+        float(geometry.inducer_mean_radius)
+        + float(geometry.impeller_outlet_radius)
+    )
+    half_pitch_m = 3.141592653589793 * r_50 / Z
+    # At mid-chord the bell-curve thickness is at its peak.
+    t_blade = _impeller_blade_thickness_max_m(geometry)
+    return max(0.0, half_pitch_m - t_blade)
 
 
 def _impeller_wrap_angle_deg(geometry) -> float:  # noqa: ANN001
@@ -205,10 +257,13 @@ def _impeller_tip_clearance_mm(geometry) -> float:  # noqa: ANN001
 
 
 def _radial_blade_thickness_max_m(geometry) -> float:  # noqa: ANN001
+    """Mirrors ``cascade.geometry.radial_turbine`` (cast-rotor floor)."""
+    from cascade.manufacturability.limits import cast_blade_peak_thickness_m
+
     explicit = getattr(geometry, "blade_thickness_max", None)
     if explicit is not None:
         return float(explicit)
-    return 0.015 * float(geometry.rotor_inlet_radius)
+    return cast_blade_peak_thickness_m(geometry.rotor_inlet_radius)
 
 
 def _radial_le_thickness_m(geometry) -> float:  # noqa: ANN001
@@ -268,7 +323,7 @@ IMPELLER_RULES: tuple[ManufacturabilityRule, ...] = (
         description="Leading-edge thickness at inlet (5-axis cutter minimum).",
         default_min=0.30e-3,
         units="m",
-        severity="warning",
+        severity="error",
         citation="AMRC 5-axis cutter survey 2019",
         measure=_impeller_le_thickness_m,
     ),
@@ -277,7 +332,7 @@ IMPELLER_RULES: tuple[ManufacturabilityRule, ...] = (
         description="Trailing-edge thickness at outlet (typical 5-axis / EDM finish).",
         default_min=0.20e-3,
         units="m",
-        severity="warning",
+        severity="error",
         citation="AMRC 5-axis cutter survey 2019",
         measure=_impeller_te_thickness_m,
     ),
@@ -305,9 +360,21 @@ IMPELLER_RULES: tuple[ManufacturabilityRule, ...] = (
         description="Blade-to-blade throat width at inducer (≥ 2 mm cutter clearance).",
         default_min=2.0e-3,
         units="m",
-        severity="warning",
+        severity="error",
         citation="AMRC 5-axis cutter survey 2019",
         measure=_impeller_throat_width_m,
+    ),
+    ManufacturabilityRule(
+        name="splitter_passage_min",
+        description=(
+            "Main-to-splitter passage width at the splitter LE "
+            "(≥ 2 mm cutter clearance; half pitch at 50% chord)."
+        ),
+        default_min=2.0e-3,
+        units="m",
+        severity="error",
+        citation="AMRC 5-axis cutter survey 2019",
+        measure=_impeller_splitter_passage_m,
     ),
     ManufacturabilityRule(
         name="wrap_angle_max",
@@ -315,7 +382,7 @@ IMPELLER_RULES: tuple[ManufacturabilityRule, ...] = (
         default_min=None,
         default_max=90.0,
         units="deg",
-        severity="warning",
+        severity="error",
         citation="Whitfield & Baines 1990 §6.5",
         measure=_impeller_wrap_angle_deg,
     ),

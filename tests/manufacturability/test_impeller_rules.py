@@ -3,10 +3,14 @@
 The canonical "all-pass" geometry here is the Eckardt-Rotor-O impeller
 (200 mm exit dia, 20 blades, 30° backsweep) — the largest of the validation
 cases shipped with Cascade, and the closest match for a microturbine-class
-machined impeller. A real Capstone C30 inducer (≈110 mm dia) needs explicit
-``leading_edge_thickness`` / ``trailing_edge_thickness`` fields to clear the
-default LE/TE floors; we cover that variant with a second test fixture that
-supplies the explicit thicknesses.
+machined impeller.
+
+Default (generator) thicknesses are FLOORED at the 5-axis machinable
+minimum (``manufacturability.limits``), so the bell-curve LE/TE estimates
+can no longer violate their rules by construction — the LE/TE rules fire
+only for explicit, user-supplied thicknesses below the floor. Tool-access
+rules (inducer throat, main-to-splitter passage) are the binding limits
+for small wheels and are exercised directly.
 """
 
 from __future__ import annotations
@@ -74,19 +78,16 @@ class _CapstoneLikeImpeller:
         )
 
 
-def _bad_impeller_le_thin() -> CentrifugalCompressorGeometry:
-    """An impeller scaled so the bell-curve LE thickness falls below 0.30 mm."""
-    # impeller_outlet_radius = 0.030 m → t_max = 1.5 % × 0.030 = 0.45 mm
-    # LE thickness = 30 % × t_max = 0.135 mm < 0.30 mm floor.
-    return CentrifugalCompressorGeometry(
-        inducer_hub_radius=0.006,
-        inducer_tip_radius=0.015,
-        impeller_outlet_radius=0.030,
-        blade_height_outlet=0.0030,
-        blade_count=12,
-        beta_2_metal_rad=math.radians(30.0),
-        tip_clearance=0.0003,
-    )
+def _bad_impeller_le_thin() -> "_CapstoneLikeImpeller":
+    """An impeller whose EXPLICIT LE thickness falls below the 0.30 mm floor.
+
+    The generator's bell-curve default is floored at the machinable minimum
+    (``machinable_blade_peak_thickness_m``), so only an explicit
+    user-supplied thickness can undercut the rule.
+    """
+    bad = _CapstoneLikeImpeller()
+    bad.leading_edge_thickness = 0.10e-3  # 0.10 mm — well below 0.30 mm
+    return bad
 
 
 # ---------------------------------------------------------------------------
@@ -137,6 +138,9 @@ class TestThinLEFails:
         assert le.direction == "below_min"
         assert le.measured < 0.30e-3
         assert le.threshold_min == pytest.approx(0.30e-3)
+        # LE thickness below the milling floor is a hard refusal, not a
+        # shop-practice warning.
+        assert le.severity == "error"
 
     def test_override_le_to_clear_violation(self) -> None:
         """Override the LE floor to 0.05 mm; the violation disappears."""
@@ -151,53 +155,142 @@ class TestThinLEFails:
 
 
 class TestMultipleViolationsStack:
-    """A small impeller violates LE, TE, and root-fillet rules."""
+    """Explicit thin edges + tight pitch stack independent violations."""
 
-    def test_three_violations(self) -> None:
-        # r_outlet 0.020 m → t_max = 0.30 mm → LE/TE = 0.090 mm (both fail).
-        # r_hub_inducer 0.005 m → default fillet = max(1.5 % × 0.005,
-        #   0.5e-3) = 0.5 mm (passes).
-        # Construct one that fails LE + TE + cutter accessibility too:
-        bad = CentrifugalCompressorGeometry(
-            inducer_hub_radius=0.004,
-            inducer_tip_radius=0.010,
-            impeller_outlet_radius=0.020,
-            blade_height_outlet=0.0020,
-            blade_count=30,  # tight pitch → cutter accessibility fails
-            beta_2_metal_rad=math.radians(30.0),
-            tip_clearance=0.0003,
-        )
-        report = check_impeller(bad)
+    @staticmethod
+    def _bad() -> "_CapstoneLikeImpeller":
+        bad = _CapstoneLikeImpeller()
+        bad.leading_edge_thickness = 0.10e-3   # below 0.30 mm floor
+        bad.trailing_edge_thickness = 0.05e-3  # below 0.20 mm floor
+        # Tight enough that even the inducer full-pitch throat (pitch −
+        # LE thickness, ~1.7 mm at Z=72 on this ~21 mm mean radius) falls
+        # below the 2 mm cutter floor — not just the splitter passage.
+        bad.blade_count = 72
+        return bad
+
+    def test_violations_stack(self) -> None:
+        report = check_impeller(self._bad())
         names = {v.rule_name for v in report.violations}
         # LE & TE thicknesses both fall below their floors.
         assert "le_thickness_min" in names
         assert "te_thickness_min" in names
-        # The 30-blade tight pitch should also fail cutter accessibility.
+        # The tight pitch fails both tool-access rules.
         assert "cutter_accessibility_min" in names
-        # And the violations stack — at least three distinct rules fire.
-        assert len(report.violations) >= 3
+        assert "splitter_passage_min" in names
+        # And the violations stack — at least four distinct rules fire.
+        assert len(report.violations) >= 4
         assert report.has_violations
+        assert report.critical_count >= 4  # all of these are severity=error
 
     def test_independent_overrides(self) -> None:
         """Overriding only one rule clears that rule but leaves others."""
-        bad = CentrifugalCompressorGeometry(
-            inducer_hub_radius=0.004,
-            inducer_tip_radius=0.010,
-            impeller_outlet_radius=0.020,
-            blade_height_outlet=0.0020,
-            blade_count=30,
-            beta_2_metal_rad=math.radians(30.0),
-            tip_clearance=0.0003,
-        )
         report = check_impeller(
-            bad,
+            self._bad(),
             overrides={"le_thickness_min": 0.05e-3},
         )
         names = {v.rule_name for v in report.violations}
         assert "le_thickness_min" not in names
-        # TE and cutter accessibility still flag.
+        # TE and the tool-access rules still flag.
         assert "te_thickness_min" in names
         assert "cutter_accessibility_min" in names
+        assert "splitter_passage_min" in names
+
+
+class TestThicknessFloorByConstruction:
+    """Generator-default thicknesses are floored at the machinable minimum."""
+
+    def test_small_wheel_le_te_pass_by_construction(self) -> None:
+        # r2 = 15 mm: the proportional rule alone would give a 0.07 mm LE.
+        small = CentrifugalCompressorGeometry(
+            inducer_hub_radius=0.0034,
+            inducer_tip_radius=0.0105,
+            impeller_outlet_radius=0.015,
+            blade_height_outlet=0.0020,
+            blade_count=8,
+            beta_2_metal_rad=math.radians(30.0),
+            tip_clearance=0.0003,
+        )
+        report = check_impeller(small)
+        names = {v.rule_name for v in report.violations}
+        assert "le_thickness_min" not in names
+        assert "te_thickness_min" not in names
+
+    def test_rules_and_mesh_share_the_floor(self) -> None:
+        """The rules' thickness estimate IS the mesh generator's thickness."""
+        from cascade.manufacturability.limits import (
+            machinable_blade_peak_thickness_m,
+        )
+        from cascade.manufacturability.rules import (
+            _impeller_blade_thickness_max_m,
+        )
+
+        small = CentrifugalCompressorGeometry(
+            inducer_hub_radius=0.0034,
+            inducer_tip_radius=0.0105,
+            impeller_outlet_radius=0.015,
+            blade_height_outlet=0.0020,
+            blade_count=8,
+            beta_2_metal_rad=math.radians(30.0),
+            tip_clearance=0.0003,
+        )
+        assert _impeller_blade_thickness_max_m(small) == pytest.approx(
+            machinable_blade_peak_thickness_m(0.015)
+        )
+        # The floor binds for small wheels (1.5% rule would give 0.225 mm).
+        assert machinable_blade_peak_thickness_m(0.015) == pytest.approx(1.0e-3)
+        # ...and yields exactly the 0.30 mm LE minimum.
+        assert 0.30 * machinable_blade_peak_thickness_m(0.015) == pytest.approx(
+            0.30e-3
+        )
+        # The proportional rule still governs large wheels.
+        assert machinable_blade_peak_thickness_m(0.100) == pytest.approx(1.5e-3)
+
+
+class TestSplitterPassageRule:
+    """Main-to-splitter passage gates blade count on small wheels."""
+
+    @staticmethod
+    def _wheel(r2_m: float, blade_count: int) -> CentrifugalCompressorGeometry:
+        # Eckardt-proportioned wheel at the requested scale (the same
+        # scaling the explore sweep uses).
+        scale = r2_m / 0.200
+        return CentrifugalCompressorGeometry(
+            inducer_hub_radius=0.045 * scale,
+            inducer_tip_radius=0.140 * scale,
+            impeller_outlet_radius=r2_m,
+            blade_height_outlet=0.026 * scale,
+            blade_count=blade_count,
+            beta_2_metal_rad=math.pi / 6,
+            tip_clearance=0.0003,
+        )
+
+    def test_small_wheel_high_blade_count_fails(self) -> None:
+        report = check_impeller(self._wheel(0.015, 18))
+        names = {v.rule_name for v in report.violations}
+        assert "splitter_passage_min" in names
+
+    def test_small_wheel_low_blade_count_passes(self) -> None:
+        report = check_impeller(self._wheel(0.015, 10))
+        names = {v.rule_name for v in report.violations}
+        assert "splitter_passage_min" not in names
+
+    def test_large_wheel_unconstrained(self) -> None:
+        report = check_impeller(self._wheel(0.045, 18))
+        names = {v.rule_name for v in report.violations}
+        assert "splitter_passage_min" not in names
+
+    def test_splitter_passage_tighter_than_inducer_throat(self) -> None:
+        """For the swept design space the splitter passage is the binding
+        tool-access dimension — the reason the rule exists."""
+        from cascade.manufacturability.rules import (
+            _impeller_splitter_passage_m,
+            _impeller_throat_width_m,
+        )
+
+        wheel = self._wheel(0.020, 16)
+        assert _impeller_splitter_passage_m(wheel) < _impeller_throat_width_m(
+            wheel
+        )
 
 
 class TestReportShape:
