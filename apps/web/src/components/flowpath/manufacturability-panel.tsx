@@ -38,11 +38,26 @@ import { cn } from "@/lib/utils";
 
 interface ManufacturabilityPanelProps {
   projectId: string;
+  /**
+   * Candidate-scoped verdict (U8 detail page): when set, the check runs on
+   * this candidate's merged geometry instead of the pinned/latest-VALID
+   * fallback heuristic.
+   */
+  candidateId?: string;
+  /** Start expanded (the detail page shows the full rule list inline). */
+  defaultExpanded?: boolean;
 }
 
-export function ManufacturabilityPanel({ projectId }: ManufacturabilityPanelProps) {
-  const { data, isLoading, isError } = useManufacturability(projectId);
-  const [expanded, setExpanded] = useState(false);
+export function ManufacturabilityPanel({
+  projectId,
+  candidateId,
+  defaultExpanded = false,
+}: ManufacturabilityPanelProps) {
+  const { data, isLoading, isError } = useManufacturability(
+    projectId,
+    candidateId,
+  );
+  const [expanded, setExpanded] = useState(defaultExpanded);
 
   if (isLoading) {
     return (

@@ -23,7 +23,7 @@ from __future__ import annotations
 import math
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, Body
+from fastapi import APIRouter, Body, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field
 
 from deps import get_project_or_404
@@ -174,17 +174,80 @@ def _geometry_summary(geometry: Any, machine_class: str) -> Dict[str, Any]:
     }
 
 
-@router.get("", response_model=ManufacturabilityResponse)
-def get_manufacturability(project_id: str) -> ManufacturabilityResponse:
-    """Run the manufacturability check on the project's active candidate.
+def _resolve_routed_candidate_geometry(
+    project: Dict[str, Any], machine_class: str, candidate_id: str
+) -> tuple[Any, str]:
+    """Build the geometry for an explicitly routed ``candidate_id`` (U8).
 
-    Pulls per-project overrides from
-    ``project.settings.manufacturability_overrides`` and merges them into the
-    rule set. Returns the report JSON with full violation / pass detail.
+    Unlike the active-candidate heuristic above (which key-merges the 3
+    sampled params into the machine-class defaults), the routed path uses
+    the normative merge helpers from ``_meanline_geom`` — the same rename +
+    r2-scaling the explore evaluator and the geometry handoff use — so the
+    candidate detail page's verdict is measured on the geometry the
+    candidate actually resolves to.
+    """
+    cand = CANDIDATE_INDEX.get(candidate_id)
+    if cand is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=(
+                f"Candidate {candidate_id!r} not found. Exploration "
+                "candidates are held in memory and expire on server "
+                "restart — re-run the exploration to regenerate them."
+            ),
+        )
+    if cand.get("project_id") != project.get("id"):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=(
+                f"Candidate {candidate_id!r} not found for project "
+                f"{project.get('id')!r}."
+            ),
+        )
+    from routers._meanline_geom import build_cc_geometry, build_rit_geometry
+
+    builder = (
+        build_cc_geometry
+        if machine_class == "centrifugal_compressor"
+        else build_rit_geometry
+    )
+    try:
+        geom, _op = builder(sample=cand.get("params") or {})
+    except Exception as exc:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "error_code": "CANDIDATE_GEOMETRY_INVALID",
+                "message": (
+                    "The candidate's parameters do not produce a valid "
+                    f"geometry: {exc}"
+                ),
+            },
+        ) from exc
+    name = project.get("name", project.get("id", "geometry"))
+    return geom, name
+
+
+def _run_check(
+    project_id: str, candidate_id: Optional[str] = None
+) -> ManufacturabilityResponse:
+    """Shared check logic for the GET and PUT endpoints.
+
+    Plain function (no FastAPI parameter defaults) so internal callers can
+    invoke it directly: calling the GET *endpoint* function from Python
+    would leak its ``Query(None)`` default object into the candidate
+    lookup and 404 every time.
     """
     project = get_project_or_404(project_id)
     machine_class = _resolve_machine_class(project)
-    geometry, geometry_name, candidate_id = _resolve_geometry(project, machine_class)
+    if candidate_id is not None:
+        geometry, geometry_name = _resolve_routed_candidate_geometry(
+            project, machine_class, candidate_id
+        )
+    else:
+        geometry, geometry_name, candidate_id = _resolve_geometry(
+            project, machine_class
+        )
 
     overrides = (project.get("settings", {}) or {}).get(
         "manufacturability_overrides", {}
@@ -218,12 +281,43 @@ def get_manufacturability(project_id: str) -> ManufacturabilityResponse:
     return ManufacturabilityResponse.model_validate(payload)
 
 
+@router.get("", response_model=ManufacturabilityResponse)
+def get_manufacturability(
+    project_id: str,
+    candidate_id: Optional[str] = Query(
+        default=None,
+        description=(
+            "Check this specific exploration candidate instead of the "
+            "pinned/latest-VALID heuristic. 404 when unknown or expired."
+        ),
+    ),
+) -> ManufacturabilityResponse:
+    """Run the manufacturability check on the project's active candidate.
+
+    Pulls per-project overrides from
+    ``project.settings.manufacturability_overrides`` and merges them into the
+    rule set. Returns the report JSON with full violation / pass detail.
+
+    With ``candidate_id`` (U8 — candidate detail page) the check runs on
+    that candidate's merged geometry; otherwise the active candidate is
+    resolved via ``settings.active_candidate_id`` or the latest VALID
+    candidate of the most recent exploration job.
+    """
+    return _run_check(project_id, candidate_id)
+
+
 @router.put("/overrides", response_model=ManufacturabilityResponse)
 def put_overrides(
     project_id: str,
     req: OverridesRequest = Body(default_factory=OverridesRequest),
 ) -> ManufacturabilityResponse:
-    """Persist a per-project rule-override map and re-run the check."""
+    """Persist a per-project rule-override map and re-run the check.
+
+    The re-run resolves the active candidate with ``candidate_id=None``
+    semantics (pinned / latest-VALID heuristic), via the shared
+    :func:`_run_check` — never by calling the GET endpoint function, whose
+    ``Query`` default would otherwise leak into the candidate lookup.
+    """
     project = get_project_or_404(project_id)
     settings = dict(project.get("settings", {}) or {})
     # Strip out any non-float entries before saving.
@@ -236,4 +330,4 @@ def put_overrides(
     settings["manufacturability_overrides"] = sanitized
     project["settings"] = settings
     PROJECTS.save(project_id)
-    return get_manufacturability(project_id)
+    return _run_check(project_id)

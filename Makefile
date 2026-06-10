@@ -6,7 +6,7 @@ VENV_PY := $(VENV)/bin/python
 PROJECT_ROOT := $(shell pwd)
 NODE_BIN := $(PROJECT_ROOT)/nodeenv/bin
 
-.PHONY: help setup api web run stop logs test test-units test-cycle test-meanline test-rotor test-geometry validation regression integration spec-parity check-citations lint typecheck demo clean clean-web
+.PHONY: help setup api web run stop logs test test-web web-build test-units test-cycle test-meanline test-rotor test-geometry validation regression integration spec-parity check-citations lint typecheck demo clean clean-web ci
 
 help:
 	@echo "Cascade — make targets"
@@ -20,6 +20,9 @@ help:
 	@echo "  logs         Tail .logs/api.log and .logs/web.log"
 	@echo ""
 	@echo "  test         Run Python tests (non-validation)"
+	@echo "  test-web     Run web unit tests + typecheck"
+	@echo "  web-build    Production build of the web app (lint + compile)"
+	@echo "  ci           Full gate: test + validation + test-web + web-build + citations"
 	@echo "  validation   Run validation suite vs SPEC_SHEET.md §12"
 	@echo "  demo         Run the 3 demo projects via CLI"
 	@echo ""
@@ -98,6 +101,23 @@ logs:
 test: setup
 	@PYTHONPATH=$(PROJECT_ROOT)/src:$(PROJECT_ROOT)/apps/api \
 		$(VENV_PY) -m pytest tests/ -m "not validation and not slow" -v
+	@# apps/api/tests is a second `tests` package — it cannot share a pytest
+	@# invocation with the root tests/ (ModuleNotFoundError on collection),
+	@# so the API suite runs separately (matches apps/api/pyproject.toml).
+	@PYTHONPATH=$(PROJECT_ROOT)/src:$(PROJECT_ROOT)/apps/api \
+		$(VENV_PY) -m pytest apps/api/tests/ -m "not validation and not slow" -v
+
+test-web:
+	@cd apps/web && PATH="$(NODE_BIN):$$PATH" npm test
+	@cd apps/web && PATH="$(NODE_BIN):$$PATH" npx tsc --noEmit
+
+# Production build is a gate: it runs lint and the full Next.js compile.
+# A red web-build means the app cannot deploy even if dev mode works.
+web-build:
+	@cd apps/web && PATH="$(NODE_BIN):$$PATH" npm run build
+
+ci: test validation test-web web-build check-citations
+	@echo "All gates green."
 
 test-units: setup
 	@PYTHONPATH=$(PROJECT_ROOT)/src $(VENV_PY) -m pytest tests/units -v

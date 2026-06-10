@@ -215,14 +215,23 @@ function rebuildChips(
         { symbol: "PR", value: fmt(num("pressure_ratio")) },
         { symbol: "η", value: fmt(num("efficiency_isentropic")) },
       ];
-    case "burner":
+    case "burner": {
+      // U7: in fuel-mass-flow mode the TIT is a solver OUTPUT — rendering
+      // the stored outlet_temperature_K would show a stale number the
+      // solver no longer honours. Emit a `derived` chip instead; the
+      // canvas (BaseNode) fills its value in from the latest solve and
+      // greys it while stale.
+      const fuelMode = params.spec_mode === "fuel_mass_flow";
       return [
-        { symbol: "T₃", value: `${fmt(num("outlet_temperature_K"))} K` },
+        fuelMode
+          ? { symbol: "T₃", value: "—", derived: true }
+          : { symbol: "T₃", value: `${fmt(num("outlet_temperature_K"))} K` },
         {
           symbol: "ΔP",
           value: `${fmt((num("pressure_drop_fraction") ?? 0) * 100, 1)} %`,
         },
       ];
+    }
     case "recuperator":
       return [
         { symbol: "ε", value: fmt(num("effectiveness")) },
@@ -331,12 +340,32 @@ async function fetchJson<T>(
     } catch {
       detail = await res.text();
     }
-    const msg =
-      typeof detail === "object" && detail !== null && "detail" in detail
-        ? String((detail as { detail: unknown }).detail)
-        : typeof detail === "string"
-          ? detail
-          : `HTTP ${res.status}`;
+    // FastAPI's error body is {detail: ...} where detail is either a
+    // plain string or a structured dict ({error_code, message, ...} —
+    // e.g. the 422 air-standard + live-meanline conflict). Stringifying
+    // the dict directly rendered "[object Object]" in toasts; prefer the
+    // structured `message` field.
+    let msg = `HTTP ${res.status}`;
+    if (typeof detail === "string" && detail) {
+      msg = detail;
+    } else if (typeof detail === "object" && detail !== null && "detail" in detail) {
+      const inner = (detail as { detail: unknown }).detail;
+      if (typeof inner === "string") {
+        msg = inner;
+      } else if (
+        inner !== null &&
+        typeof inner === "object" &&
+        typeof (inner as { message?: unknown }).message === "string"
+      ) {
+        msg = (inner as { message: string }).message;
+      } else if (inner != null) {
+        try {
+          msg = JSON.stringify(inner);
+        } catch {
+          /* keep the HTTP fallback */
+        }
+      }
+    }
     throw new ApiError(res.status, msg, detail);
   }
   if (res.status === 204) return undefined as unknown as T;
@@ -806,6 +835,65 @@ export function adaptMapResult(backend: MapResultBackend): MapResult {
   return { rpmList, points };
 }
 
+/* ---------------------------------------------------------------------------
+ * Runs adaptation (U8): backend JobModel → legacy RunRecord.
+ *
+ * The runs page renders RunRecord rows; the backend jobs endpoint speaks
+ * JobModel. Status mapping: done → succeeded; failed / cancelled / queued /
+ * running pass through. Refusals (U1 contract: failed + error null +
+ * result.failure) keep the failed badge and gain the `refused` flag so the
+ * summary can say "refused" rather than implying a crash. Explore jobs
+ * expose `best_id` for the candidate-detail deep link.
+ *
+ * Mirrored by src/__tests__/candidate-detail-state.test.mjs.
+ * ------------------------------------------------------------------------- */
+
+const RUN_KINDS = new Set(["cycle", "explore", "analysis", "map", "rotor"]);
+
+export function adaptJobToRunRecord(job: JobModel): RunRecord {
+  const kind = (
+    RUN_KINDS.has(job.kind) ? job.kind : "cycle"
+  ) as RunRecord["kind"];
+  const status: RunRecord["status"] =
+    job.status === "done"
+      ? "succeeded"
+      : job.status === "failed"
+        ? "failed"
+        : job.status === "cancelled"
+          ? "cancelled"
+          : job.status === "running"
+            ? "running"
+            : "queued";
+  const startedMs = Date.parse(job.created_at);
+  const finishedMs = job.finished_at ? Date.parse(job.finished_at) : NaN;
+  const durationMs =
+    Number.isFinite(startedMs) && Number.isFinite(finishedMs)
+      ? Math.max(0, finishedMs - startedMs)
+      : undefined;
+  const result = (job.result ?? undefined) as
+    | Record<string, unknown>
+    | undefined;
+  const refused =
+    job.status === "failed" &&
+    job.error == null &&
+    Boolean(result && typeof result === "object" && "failure" in result);
+  const bestId =
+    kind === "explore" && typeof result?.best_id === "string"
+      ? (result.best_id as string)
+      : undefined;
+  return {
+    id: job.id,
+    kind,
+    status,
+    startedAt: job.created_at,
+    finishedAt: job.finished_at ?? undefined,
+    durationMs,
+    summary: job.message || undefined,
+    bestCandidateId: bestId,
+    refused: refused || undefined,
+  };
+}
+
 /** Convert a backend cycle-solver `result` dict to our typed CycleResult. */
 export function adaptCycleResult(raw: Record<string, unknown>): CycleResult {
   const num = (k: string, fallback = 0): number => {
@@ -844,6 +932,41 @@ export function adaptCycleResult(raw: Record<string, unknown>): CycleResult {
           typeof c.outletMassFlow === "number" ? c.outletMassFlow : 0,
       }))
     : [];
+  // U9: per-rotor efficiency attribution. The backend ships four dicts
+  // keyed by component name — converged η, the mode actually used, the
+  // mode the user requested (pre-fallback), and an explicit fallback
+  // flag. The result panel's "Efficiency sources" block renders from
+  // these; dropping them (the pre-U9 behaviour) left a live-meanline
+  // fallback invisible. Mirrored by
+  // src/__tests__/efficiency-sources.test.mjs.
+  const recordOf = <V,>(
+    k: string,
+    isV: (v: unknown) => v is V,
+  ): Record<string, V> | undefined => {
+    const v = raw[k];
+    if (!v || typeof v !== "object" || Array.isArray(v)) return undefined;
+    const out: Record<string, V> = {};
+    for (const [name, val] of Object.entries(v as Record<string, unknown>)) {
+      if (isV(val)) out[name] = val;
+    }
+    return out;
+  };
+  const componentEfficiencies = recordOf(
+    "component_efficiencies",
+    (v): v is number => typeof v === "number" && Number.isFinite(v),
+  );
+  const efficiencyModes = recordOf(
+    "efficiency_modes",
+    (v): v is string => typeof v === "string",
+  );
+  const requestedEfficiencyModes = recordOf(
+    "requested_efficiency_modes",
+    (v): v is string => typeof v === "string",
+  );
+  const efficiencyFallbacks = recordOf(
+    "efficiency_fallbacks",
+    (v): v is boolean => typeof v === "boolean",
+  );
   // Structured-failure envelope (backend `_classify_failure`). Present
   // when the solver couldn't produce a valid answer; the UI surfaces it
   // as a friendly explanation (design issues) or a copy-the-log panel
@@ -878,6 +1001,10 @@ export function adaptCycleResult(raw: Record<string, unknown>): CycleResult {
     electricalOutput: quantity("electrical_output", 1e-3),
     components,
     states,
+    componentEfficiencies,
+    efficiencyModes,
+    requestedEfficiencyModes,
+    efficiencyFallbacks,
     failure,
   };
 }
@@ -907,10 +1034,15 @@ class RealApiClient implements ApiClient {
 
   async getProject(id: string): Promise<Project | undefined> {
     try {
-      const backend = await fetchJson<BackendProjectSummary>(
+      // The detail endpoint also carries `settings`; surface the
+      // air-standard flag so the UI can disable fuel-mass-flow mode (U7)
+      // without waiting for the backend's synchronous 422.
+      const backend = await fetchJson<BackendProjectDetail>(
         `/api/projects/${encodeURIComponent(id)}`,
       );
-      return adaptProjectSummary(backend);
+      const project = adaptProjectSummary(backend);
+      project.airStandard = Boolean(backend.settings?.air_standard);
+      return project;
     } catch (err) {
       if (
         err instanceof ApiError &&
@@ -962,8 +1094,24 @@ class RealApiClient implements ApiClient {
     return delay(ROTOR_SHAPES[projectId] ?? { totalLength: 0, sections: [] });
   }
 
+  /**
+   * Real runs history (U8): GET /api/jobs?project_id= adapted to the
+   * legacy RunRecord shape. Falls back to the deterministic seed rows only
+   * when the backend is unreachable (offline review), never on an empty
+   * result — an empty project genuinely has no runs.
+   */
   async listRuns(projectId: string): Promise<RunRecord[]> {
-    return delay(RUNS[projectId] ?? []);
+    try {
+      const jobs = await fetchJson<JobModel[]>(
+        `/api/jobs?project_id=${encodeURIComponent(projectId)}`,
+      );
+      return jobs.map(adaptJobToRunRecord);
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 0) {
+        return delay(RUNS[projectId] ?? []);
+      }
+      throw err;
+    }
   }
 
   // ---- Cycle CRUD (real backend; falls back to mock CYCLES on network err).
@@ -1276,9 +1424,13 @@ class RealApiClient implements ApiClient {
 
   async getManufacturability(
     projectId: string,
+    candidateId?: string,
   ): Promise<ManufacturabilityReport> {
+    const qs = candidateId
+      ? `?candidate_id=${encodeURIComponent(candidateId)}`
+      : "";
     return fetchJson<ManufacturabilityReport>(
-      `/api/projects/${encodeURIComponent(projectId)}/manufacturability`,
+      `/api/projects/${encodeURIComponent(projectId)}/manufacturability${qs}`,
     );
   }
 
@@ -1727,8 +1879,10 @@ class MockApiClient implements ApiClient {
 
   async getManufacturability(
     _projectId: string,
+    _candidateId?: string,
   ): Promise<ManufacturabilityReport> {
     void _projectId;
+    void _candidateId;
     // Mock: return an all-pass report so the UI panel can hydrate offline.
     return delay({
       machine_class: "centrifugal_compressor",

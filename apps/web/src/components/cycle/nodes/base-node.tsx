@@ -9,6 +9,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { PORTS, type PortKind } from "../edge-validator";
+import { useCycleUiStore } from "../store";
 import type { CycleNodeKind } from "@/lib/api/types";
 
 export interface CycleNodeData extends Record<string, unknown> {
@@ -16,7 +17,8 @@ export interface CycleNodeData extends Record<string, unknown> {
   label: string;
   /** Two-character family code (e.g. "C1", "T1") — appears next to label. */
   ref?: string;
-  chips: Array<{ symbol: string; value: string }>;
+  /** `derived: true` chips render from the latest solve (see CycleNode). */
+  chips: Array<{ symbol: string; value: string; derived?: boolean }>;
   validationError?: string;
   /**
    * Full parameter bag for the component. Mirrors the Python dataclass in
@@ -75,6 +77,16 @@ export function BaseNode({
 }: BaseNodeProps) {
   const ports = PORTS[data.kind];
   const hasError = Boolean(data.validationError);
+
+  // U7: derived chips (burner T₃ in fuel-mass-flow mode) render from the
+  // latest solve, never from a stored parameter. While a run is in flight
+  // the previous value stays visible but greyed; with no fresh result it
+  // shows "—" greyed.
+  const runStatus = useCycleUiStore((s) => s.run.status);
+  const lastDerivedT = React.useRef<number | undefined>(undefined);
+  if (data.solvedState !== undefined) {
+    lastDerivedT.current = data.solvedState.outletTemperature;
+  }
 
   const borderClass = hasError
     ? "border-semantic-danger"
@@ -135,12 +147,54 @@ export function BaseNode({
       {/* Design-input chips */}
       {data.chips.length > 0 && (
         <div className="grid grid-cols-2 gap-x-2 gap-y-0.5 px-2 py-1.5 font-mono text-[11px] leading-tight">
-          {data.chips.map((c) => (
-            <div key={c.symbol} className="flex items-baseline gap-1">
-              <span className="text-text-muted">{c.symbol}</span>
-              <span className="tabular-nums text-text">{c.value}</span>
-            </div>
-          ))}
+          {data.chips.map((c) => {
+            if (c.derived) {
+              // Computed value, not a stored parameter. Fresh result →
+              // computed-value tint; in-flight → previous value greyed;
+              // stale / never solved → "—" greyed.
+              const freshT = data.solvedState?.outletTemperature;
+              const inFlight = runStatus === "running";
+              const display =
+                freshT !== undefined
+                  ? `${freshT.toFixed(0)} K`
+                  : inFlight && lastDerivedT.current !== undefined
+                    ? `${lastDerivedT.current.toFixed(0)} K`
+                    : c.value;
+              const fresh = freshT !== undefined && !inFlight;
+              return (
+                <div
+                  key={c.symbol}
+                  className="col-span-2 flex items-baseline gap-1"
+                >
+                  <span className="text-text-muted">{c.symbol}</span>
+                  <span
+                    className={cn(
+                      "tabular-nums",
+                      fresh
+                        ? "rounded-sm bg-surface-computed px-1 text-text"
+                        : "text-text-disabled",
+                    )}
+                  >
+                    {display}
+                  </span>
+                  <span
+                    className={cn(
+                      "text-[9px]",
+                      fresh ? "text-text-muted" : "text-text-disabled",
+                    )}
+                  >
+                    (derived)
+                  </span>
+                </div>
+              );
+            }
+            return (
+              <div key={c.symbol} className="flex items-baseline gap-1">
+                <span className="text-text-muted">{c.symbol}</span>
+                <span className="tabular-nums text-text">{c.value}</span>
+              </div>
+            );
+          })}
         </div>
       )}
       {data.chips.length === 0 && !data.solvedState && (

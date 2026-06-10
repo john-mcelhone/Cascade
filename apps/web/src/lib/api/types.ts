@@ -20,6 +20,13 @@ export interface Project {
   createdAt: string;
   updatedAt: string;
   workingFluid: WorkingFluid;
+  /**
+   * Project-level air-standard (ideal Brayton) flag — the public F1
+   * setting. Populated by `getProject` (the detail endpoint carries
+   * `settings`); undefined on list summaries. U7 uses it to disable the
+   * burner's fuel-mass-flow spec mode (no combustion → no fuel stream).
+   */
+  airStandard?: boolean;
   /** Headline metric for the project card sparkline. */
   headline: {
     label: string;
@@ -49,8 +56,16 @@ export interface CycleNode {
   label: string;
   x: number;
   y: number;
-  /** Display-only parameter chips (e.g. PR for compressor). */
-  chips: Array<{ symbol: string; value: string }>;
+  /**
+   * Display-only parameter chips (e.g. PR for compressor).
+   *
+   * `derived: true` marks a chip whose value is a solver OUTPUT, not a
+   * stored parameter (U7: the burner T₃ chip in fuel-mass-flow mode shows
+   * the back-derived TIT). The canvas fills the value in from the latest
+   * solve and greys it while stale — it must never render a stored value
+   * the solver no longer honours.
+   */
+  chips: Array<{ symbol: string; value: string; derived?: boolean }>;
   /** Optional parameter bag for backend round-trip. */
   params?: Record<string, number | string | boolean>;
 }
@@ -130,6 +145,26 @@ export interface CycleResult {
   components: CycleComponentResult[];
   /** Plotted cycle states for the T-s diagram (numbered). */
   states: CycleStatePoint[];
+  /**
+   * Converged η actually used per rotor, keyed by component name (e.g.
+   * "C1"). In live mean-line mode this is the geometry-derived value, not
+   * the stored efficiency_isentropic. Empty on failure envelopes.
+   */
+  componentEfficiencies?: Record<string, number>;
+  /**
+   * Efficiency mode the solve ACTUALLY used per rotor (solver convention:
+   * "constant" | "polytropic" | "live_meanline").
+   */
+  efficiencyModes?: Record<string, string>;
+  /**
+   * Efficiency mode the user's params REQUESTED per rotor (pre-fallback).
+   * Differs from `efficiencyModes` when live mean-line was requested with
+   * no geometry attached and the solver fell back to constant η — U9 /
+   * ADAPT-045: the fallback is surfaced, never silent.
+   */
+  requestedEfficiencyModes?: Record<string, string>;
+  /** Explicit per-rotor flag: live mean-line requested but the solve fell back. */
+  efficiencyFallbacks?: Record<string, boolean>;
   /** Populated when the solver didn't converge or threw. */
   failure?: CycleFailure;
 }
@@ -190,6 +225,19 @@ export interface RunRecord {
   finishedAt?: string;
   durationMs?: number;
   summary?: string;
+  /**
+   * For explore runs: the best candidate's id (from the job result's
+   * `best_id`), so the runs page can deep-link to the candidate detail
+   * route. Absent for other kinds or unfinished/refused explorations.
+   */
+  bestCandidateId?: string;
+  /**
+   * A refused run (U1 refusal contract): status `failed` with `error`
+   * null and a structured failure envelope on the result. The runs page
+   * shows the failed badge either way; this flag distinguishes a refusal
+   * from a crash in the summary copy.
+   */
+  refused?: boolean;
 }
 
 export interface JobProgressEvent {
@@ -724,7 +772,10 @@ export interface ApiClient {
   getMaterial(name: string): Promise<MaterialRecord>;
 
   /** Manufacturability check (ADAPT-032). */
-  getManufacturability(projectId: string): Promise<ManufacturabilityReport>;
+  getManufacturability(
+    projectId: string,
+    candidateId?: string,
+  ): Promise<ManufacturabilityReport>;
   setManufacturabilityOverrides(
     projectId: string,
     overrides: Record<string, number>,

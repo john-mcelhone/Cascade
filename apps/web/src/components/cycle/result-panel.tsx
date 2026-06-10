@@ -14,10 +14,80 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { fmtNumber } from "@/lib/utils";
 import { useCycleUiStore } from "./store";
-import type { CycleFailure, CycleNode } from "@/lib/api/types";
+import type { CycleFailure, CycleNode, CycleResult } from "@/lib/api/types";
 
 interface ResultPanelProps {
   nodes: CycleNode[];
+}
+
+/* ---------------------------------------------------------------------------
+ * U9 / ADAPT-045 — per-rotor efficiency attribution.
+ *
+ * The backend ships four dicts keyed by component name: the converged η
+ * actually used, the mode actually used, the mode the user requested
+ * (pre-fallback), and an explicit fallback flag. The block below renders a
+ * row per rotor and, when live mean-line was requested but the solve fell
+ * back to constant η, a warning chip — icon + text, never colour alone.
+ * The chip copy stays neutral about *why* the fallback happened: the
+ * payload proves only that geometry wasn't used, not whether a geometry
+ * bag was attached (a constructor failure also falls back, ADAPT-045).
+ *
+ * Mirrored (plain JS) by src/__tests__/efficiency-sources.test.mjs.
+ * ------------------------------------------------------------------------- */
+
+/** Solver-convention mode → human label ("constant" is the lumped η path). */
+const EFFICIENCY_MODE_LABELS: Record<string, string> = {
+  constant: "isentropic",
+  polytropic: "polytropic",
+  live_meanline: "live mean-line",
+};
+
+interface EfficiencySourceRow {
+  componentId: string;
+  /** Converged η actually used; undefined when the payload lacks it. */
+  eta?: number;
+  /** Human label for the mode actually used. */
+  modeLabel: string;
+  /** Live mean-line was requested but the solve fell back to constant η. */
+  fellBack: boolean;
+}
+
+function efficiencySourceRows(
+  result: Pick<
+    CycleResult,
+    | "componentEfficiencies"
+    | "efficiencyModes"
+    | "requestedEfficiencyModes"
+    | "efficiencyFallbacks"
+  >,
+): EfficiencySourceRow[] {
+  const modes = result.efficiencyModes ?? {};
+  const requested = result.requestedEfficiencyModes ?? {};
+  const fallbacks = result.efficiencyFallbacks ?? {};
+  return Object.keys(modes).map((name) => ({
+    componentId: name,
+    eta: result.componentEfficiencies?.[name],
+    modeLabel: EFFICIENCY_MODE_LABELS[modes[name]] ?? modes[name],
+    fellBack:
+      fallbacks[name] === true ||
+      (requested[name] === "live_meanline" && modes[name] !== "live_meanline"),
+  }));
+}
+
+/** Show the block when live mean-line was requested OR a fallback occurred. */
+function showEfficiencySources(
+  result: Pick<
+    CycleResult,
+    "efficiencyModes" | "requestedEfficiencyModes" | "efficiencyFallbacks"
+  >,
+): boolean {
+  return (
+    Object.values(result.efficiencyModes ?? {}).includes("live_meanline") ||
+    Object.values(result.requestedEfficiencyModes ?? {}).includes(
+      "live_meanline",
+    ) ||
+    Object.values(result.efficiencyFallbacks ?? {}).some(Boolean)
+  );
 }
 
 /**
@@ -82,6 +152,7 @@ export function ResultPanel({ nodes }: ResultPanelProps) {
       </div>
 
       {!collapsed && (
+        <>
         <div className="grid grid-cols-1 gap-3 p-3 md:grid-cols-[1fr_2fr]">
           {/* Headline metrics */}
           <div className="grid grid-cols-3 gap-3">
@@ -141,7 +212,16 @@ export function ResultPanel({ nodes }: ResultPanelProps) {
                   </tr>
                 ) : (
                   result.components.map((c) => {
-                    const node = nodes.find((n) => n.id === c.componentId);
+                    const node = nodes.find(
+                      (n) =>
+                        n.id === c.componentId || n.label === c.componentId,
+                    );
+                    // U7: in fuel-mass-flow mode the burner outlet Tt (the
+                    // TIT) is back-derived from ṁ_fuel — label it so the
+                    // user knows it's a solver output, not their input.
+                    const titDerived =
+                      node?.kind === "burner" &&
+                      node.params?.spec_mode === "fuel_mass_flow";
                     return (
                       <tr key={c.componentId}>
                         <td className="px-2 py-1 font-sans">
@@ -155,6 +235,11 @@ export function ResultPanel({ nodes }: ResultPanelProps) {
                         </td>
                         <td className="px-2 py-1 text-right tabular-nums">
                           {fmtNumber(c.outletTemperature, { decimals: 0 })}
+                          {titDerived && (
+                            <span className="ml-1 font-sans text-[10px] text-text-muted">
+                              (derived)
+                            </span>
+                          )}
                         </td>
                         <td className="px-2 py-1 text-right tabular-nums">
                           {fmtNumber(c.outletPressure, { decimals: 1 })}
@@ -170,6 +255,53 @@ export function ResultPanel({ nodes }: ResultPanelProps) {
             </table>
           </div>
         </div>
+
+        {/* U9: per-rotor efficiency attribution — shown when live
+            mean-line was requested or a fallback occurred. */}
+        {showEfficiencySources(result) && (
+          <div className="border-t border-border-subtle px-3 pb-3">
+            <div className="mb-1.5 mt-2 text-xs font-medium uppercase tracking-wide text-text-muted">
+              Efficiency sources
+            </div>
+            <div className="flex flex-col gap-1.5">
+              {efficiencySourceRows(result).map((row) => {
+                const node = nodes.find(
+                  (n) =>
+                    n.id === row.componentId || n.label === row.componentId,
+                );
+                return (
+                  <div
+                    key={row.componentId}
+                    className="flex flex-wrap items-center gap-2 text-xs"
+                  >
+                    <span className="text-text">
+                      {node?.label ?? row.componentId}
+                      {node && (
+                        <span className="ml-1 text-text-muted">
+                          ({node.kind})
+                        </span>
+                      )}
+                    </span>
+                    <span className="font-mono tabular-nums text-text">
+                      η ={" "}
+                      {row.eta !== undefined
+                        ? fmtNumber(row.eta, { decimals: 3 })
+                        : "—"}
+                    </span>
+                    <span className="text-text-muted">({row.modeLabel})</span>
+                    {row.fellBack && (
+                      <span className="inline-flex items-center gap-1 rounded-sm border border-semantic-warning-border bg-semantic-warning-surface/40 px-1.5 py-0.5 text-[11px] text-semantic-warning-text">
+                        <AlertTriangle className="h-3 w-3" aria-hidden="true" />
+                        Fell back to isentropic — geometry not used
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+        </>
       )}
     </div>
   );

@@ -15,8 +15,10 @@ export const queryKeys = {
   map: (id: string) => ["project", id, "map"] as const,
   rotor: (id: string) => ["project", id, "rotor"] as const,
   runs: (id: string) => ["project", id, "runs"] as const,
-  manufacturability: (id: string) =>
-    ["project", id, "manufacturability"] as const,
+  manufacturability: (id: string, candidateId?: string) =>
+    candidateId
+      ? (["project", id, "manufacturability", candidateId] as const)
+      : (["project", id, "manufacturability"] as const),
 };
 
 export function useProjects() {
@@ -99,12 +101,18 @@ export function useRuns(projectId: string | undefined) {
  * the report is cheap and the user expects it to reflect any new candidate
  * the explorer just delivered.
  */
-export function useManufacturability(projectId: string | undefined) {
+export function useManufacturability(
+  projectId: string | undefined,
+  candidateId?: string,
+) {
   return useQuery({
-    queryKey: queryKeys.manufacturability(projectId ?? ""),
-    queryFn: () => api.getManufacturability(projectId!),
+    queryKey: queryKeys.manufacturability(projectId ?? "", candidateId),
+    queryFn: () => api.getManufacturability(projectId!, candidateId),
     enabled: Boolean(projectId),
     staleTime: 0,
+    // The candidate-scoped report 404s after a server restart (candidates
+    // are ephemeral); retrying cannot help and delays the expired state.
+    retry: candidateId ? false : 3,
   });
 }
 
@@ -128,6 +136,15 @@ export function useSetManufacturabilityOverrides(
         queryKeys.manufacturability(projectId),
         report,
       );
+      // Candidate-scoped reports (U8 detail page) share the override map;
+      // refetch them so the verdict reflects the new thresholds.
+      queryClient.invalidateQueries({
+        predicate: (q) =>
+          q.queryKey[0] === "project" &&
+          q.queryKey[1] === projectId &&
+          q.queryKey[2] === "manufacturability" &&
+          q.queryKey.length === 4,
+      });
     },
   });
 }

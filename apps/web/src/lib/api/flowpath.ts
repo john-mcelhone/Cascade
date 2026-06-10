@@ -21,6 +21,8 @@ export function apiBase(): string {
 export interface ServerCandidate {
   id: string;
   job_id: string;
+  /** Owning project — used by the detail route's cross-project guard. */
+  project_id?: string | null;
   index: number;
   params: Record<string, number>;
   objectives: Record<string, number>;
@@ -129,6 +131,212 @@ export async function getCandidate(
   });
   if (!r.ok) throw new Error(`candidate ${candidateId}: ${r.status}`);
   return r.json();
+}
+
+// ---------------------------------------------------------------------------
+// Candidate detail + geometry handoff (U8)
+// ---------------------------------------------------------------------------
+
+/** HTTP error that keeps the status code so callers can branch on 404/422. */
+export class FlowPathApiError extends Error {
+  status: number;
+  detail: unknown;
+
+  constructor(status: number, message: string, detail?: unknown) {
+    super(message);
+    this.name = "FlowPathApiError";
+    this.status = status;
+    this.detail = detail;
+  }
+}
+
+async function flowPathJson<T>(
+  path: string,
+  init?: RequestInit,
+): Promise<T> {
+  const r = await fetch(`${apiBase()}${path}`, {
+    headers: init?.body
+      ? { "content-type": "application/json" }
+      : undefined,
+    ...init,
+  });
+  if (!r.ok) {
+    let detail: unknown;
+    try {
+      detail = await r.json();
+    } catch {
+      detail = undefined;
+    }
+    // FastAPI's error body is {detail: ...} where detail is either a
+    // plain string or a structured dict ({error_code, message, ...}).
+    // Mirrors fetchJson's extraction in client.ts: string detail passes
+    // through, structured detail prefers `message`, any other dict is
+    // JSON-stringified — never "[object Object]".
+    const d = detail as { detail?: unknown } | undefined;
+    let message = `HTTP ${r.status}`;
+    if (typeof detail === "string" && detail) {
+      message = detail;
+    } else if (
+      typeof detail === "object" &&
+      detail !== null &&
+      "detail" in detail
+    ) {
+      const inner = (detail as { detail: unknown }).detail;
+      if (typeof inner === "string") {
+        message = inner;
+      } else if (
+        inner !== null &&
+        typeof inner === "object" &&
+        typeof (inner as { message?: unknown }).message === "string"
+      ) {
+        message = (inner as { message: string }).message;
+      } else if (inner != null) {
+        try {
+          message = JSON.stringify(inner);
+        } catch {
+          /* keep the HTTP fallback */
+        }
+      }
+    }
+    throw new FlowPathApiError(r.status, message, d?.detail);
+  }
+  if (r.status === 204) return undefined as unknown as T;
+  return r.json();
+}
+
+/** Fetch a candidate, distinguishing 404 (expired/unknown) from other errors. */
+export type CandidateFetchOutcome =
+  | { kind: "ok"; candidate: ServerCandidate }
+  | { kind: "not-found" }
+  | { kind: "error"; message: string };
+
+export async function fetchCandidateOutcome(
+  candidateId: string,
+  signal?: AbortSignal,
+): Promise<CandidateFetchOutcome> {
+  try {
+    const r = await fetch(
+      `${apiBase()}/api/candidates/${encodeURIComponent(candidateId)}`,
+      { signal },
+    );
+    if (r.status === 404) return { kind: "not-found" };
+    if (!r.ok) return { kind: "error", message: `HTTP ${r.status}` };
+    return { kind: "ok", candidate: (await r.json()) as ServerCandidate };
+  } catch (err) {
+    return {
+      kind: "error",
+      message: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
+/** The full merged geometry a candidate resolves to (the handoff write set). */
+export interface MergedGeometry {
+  candidate_id: string;
+  machine_class: string;
+  geometry_params: Record<string, number>;
+  operating_point: Record<string, number | string>;
+  sampled_keys: string[];
+  meanline_rpm_rpm: number;
+}
+
+export async function getMergedGeometry(
+  candidateId: string,
+  projectId: string,
+  signal?: AbortSignal,
+): Promise<MergedGeometry> {
+  return flowPathJson<MergedGeometry>(
+    `/api/candidates/${encodeURIComponent(candidateId)}/merged-geometry?project_id=${encodeURIComponent(projectId)}`,
+    { signal },
+  );
+}
+
+export interface SendToCycleResult {
+  project_id: string;
+  candidate_id: string;
+  component_id: string;
+  geometry_params: Record<string, number>;
+  meanline_rpm_rpm: number;
+  aligned: boolean;
+  pressure_ratio: number | null;
+  mass_flow_kg_per_s: number | null;
+}
+
+export async function sendCandidateToCycle(
+  candidateId: string,
+  projectId: string,
+  alignOperatingPoint: boolean,
+): Promise<SendToCycleResult> {
+  return flowPathJson<SendToCycleResult>(
+    `/api/candidates/${encodeURIComponent(candidateId)}/send-to-cycle`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        project_id: projectId,
+        align_operating_point: alignOperatingPoint,
+      }),
+    },
+  );
+}
+
+export interface PinCandidateResult {
+  project_id: string;
+  active_candidate_id: string;
+  snapshot: Record<string, unknown>;
+}
+
+export async function pinCandidate(
+  candidateId: string,
+  projectId: string,
+): Promise<PinCandidateResult> {
+  return flowPathJson<PinCandidateResult>(
+    `/api/candidates/${encodeURIComponent(candidateId)}/pin`,
+    {
+      method: "POST",
+      body: JSON.stringify({ project_id: projectId }),
+    },
+  );
+}
+
+export async function detachComponentGeometry(
+  projectId: string,
+  componentId: string,
+): Promise<void> {
+  await flowPathJson<void>(
+    `/api/projects/${encodeURIComponent(projectId)}/components/${encodeURIComponent(componentId)}/geometry`,
+    { method: "DELETE" },
+  );
+}
+
+/** Raw (untranslated) components — exposes geometry_params, which the
+ * cycle-page param translation deliberately does not surface. */
+export interface RawComponent {
+  id: string;
+  kind: string;
+  name: string;
+  params: Record<string, unknown>;
+}
+
+export async function getRawComponents(
+  projectId: string,
+  signal?: AbortSignal,
+): Promise<RawComponent[]> {
+  const body = await flowPathJson<{ components: RawComponent[] }>(
+    `/api/projects/${encodeURIComponent(projectId)}/components`,
+    { signal },
+  );
+  return body.components;
+}
+
+/** Project settings bag (active_candidate_id, pinned_candidates, …). */
+export async function getProjectSettings(
+  projectId: string,
+  signal?: AbortSignal,
+): Promise<Record<string, unknown>> {
+  const detail = await flowPathJson<{
+    settings?: Record<string, unknown>;
+  }>(`/api/projects/${encodeURIComponent(projectId)}`, { signal });
+  return detail.settings ?? {};
 }
 
 export function geometryUrl(

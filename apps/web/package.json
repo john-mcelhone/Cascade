@@ -8,7 +8,7 @@
     "start": "next start -p 3000",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-    "test": "node src/__tests__/filter-dsl.test.mjs"
+    "test": "node src/__tests__/filter-dsl.test.mjs && node src/__tests__/burner-fuel-mode-chips.test.mjs && node src/__tests__/candidate-detail-state.test.mjs && node src/__tests__/efficiency-sources.test.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.1",

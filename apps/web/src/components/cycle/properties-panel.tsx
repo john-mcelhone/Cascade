@@ -11,9 +11,11 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z, type ZodObject, type ZodRawShape } from "zod";
 import {
   AlertTriangle,
+  Box,
   ChevronDown,
   ChevronRight,
   HelpCircle,
+  Info,
   MoreHorizontal,
   Save,
   Trash2,
@@ -43,6 +45,7 @@ import {
 } from "@/components/ui/tooltip";
 import { QuantityInput, ComputedValue } from "./quantity-input";
 import { MaterialPicker } from "@/components/materials/material-picker";
+import { getProjectSettings, getRawComponents } from "@/lib/api/flowpath";
 import type {
   CycleNode,
   CycleNodeKind,
@@ -238,6 +241,7 @@ export function PropertiesPanel({
           <NodeForm
             key={node.id}
             node={node}
+            project={project}
             result={result}
             onPatch={onPatch}
             onDelete={onDelete}
@@ -397,8 +401,10 @@ interface KindSchema {
   /** Readonly-badge fields, displayed as informational pills next to the
    *  title. Each renders the param value as a Badge — they aren't editable. */
   readonlyBadges?: Array<{ key: string; prefix?: string }>;
-  /** Composite zod schema (essentials + advanced + selects). */
-  zod: ZodObject<ZodRawShape>;
+  /** Composite zod schema (essentials + advanced + selects). May carry
+   *  cross-field refinements (e.g. the burner's fuel-flow gt(0) only when
+   *  fuel mode is active), hence the wider type. */
+  zod: z.ZodTypeAny;
   /**
    * When set, this entire kind is a "preview" — values save & round-trip
    * but the Brayton-cycle solver in `_build_recuperated_spec` doesn't
@@ -789,22 +795,37 @@ const SCHEMAS: Record<CycleNodeKind, KindSchema> = {
         max: 5,
         step: 0.0001,
         kind: "quantity",
+        defaultValue: 0.002,
         tooltip:
-          "Only used when spec-mode = 'Fuel ṁ'. Preview: today only spec-mode = 'Outlet T (TIT)' feeds the cycle solver — picking 'Fuel ṁ' is persisted but the solver still uses the outlet-T spec.",
-        wired: false,
+          "Fuel injected at the combustor. When spec-mode = 'Fuel ṁ' this drives the energy balance and the solver back-derives the TIT (Walsh & Fletcher §5.10). A 30 kW-class microturbine burns ≈0.002 kg/s of natural gas.",
       },
     ],
     // See compressor zod note: pressure_drop_fraction is a percentFraction
     // (display unit %), so its raw [0, 0.1] becomes display [0, 10].
-    zod: z.object({
-      outlet_temperature_K: z.number().gte(400).lte(2000),
-      pressure_drop_fraction: z.number().gte(0).lte(10),
-      combustion_efficiency: z.number().gte(0.9).lte(1),
-      spec_mode: z.enum(["outlet_temperature", "fuel_mass_flow"]),
-      fuel_species: z.enum(["CH4", "JP-4", "JP-8", "generic"]),
-      fuel_lhv_MJ_per_kg: z.number().gte(10).lte(130),
-      fuel_mass_flow_kg_s: z.number().gte(0).lte(5),
-    }),
+    zod: z
+      .object({
+        outlet_temperature_K: z.number().gte(400).lte(2000),
+        pressure_drop_fraction: z.number().gte(0).lte(10),
+        combustion_efficiency: z.number().gte(0.9).lte(1),
+        spec_mode: z.enum(["outlet_temperature", "fuel_mass_flow"]),
+        fuel_species: z.enum(["CH4", "JP-4", "JP-8", "generic"]),
+        fuel_lhv_MJ_per_kg: z.number().gte(10).lte(130),
+        fuel_mass_flow_kg_s: z.number().gte(0).lte(5),
+      })
+      .superRefine((vals, ctx) => {
+        // U7: gt(0) applies only when the fuel value is the ACTIVE spec —
+        // in outlet-T mode the field is inactive and a stored 0 is legal.
+        if (
+          vals.spec_mode === "fuel_mass_flow" &&
+          !(vals.fuel_mass_flow_kg_s > 0)
+        ) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["fuel_mass_flow_kg_s"],
+            message: "Fuel mass flow must be > 0 in fuel-ṁ mode.",
+          });
+        }
+      }),
   },
   recuperator: {
     essentials: [
@@ -1106,11 +1127,13 @@ const SCHEMAS: Record<CycleNodeKind, KindSchema> = {
 
 function NodeForm({
   node,
+  project,
   result,
   onPatch,
   onDelete,
 }: {
   node: CycleNode;
+  project?: Project;
   result?: PropertiesPanelProps["result"];
   onPatch: PropertiesPanelProps["onPatch"];
   onDelete: PropertiesPanelProps["onDelete"];
@@ -1200,6 +1223,136 @@ function NodeForm({
   const [showAdvanced, setShowAdvanced] = React.useState(false);
   const [dirty, setDirty] = React.useState(false);
 
+  // ---- U7: Burner spec-mode plumbing -------------------------------------
+  // Which side of the energy balance is pinned. Watching the form (not
+  // node.params) means section membership and the disabled treatment react
+  // immediately as the user flips the radio, before Save.
+  const burnerSpecMode =
+    node.kind === "burner"
+      ? (form.watch("spec_mode" as Path<Values>) as unknown as string)
+      : undefined;
+  const fuelModeActive = burnerSpecMode === "fuel_mass_flow";
+
+  // Dynamic section membership: in fuel mode the fuel-flow field is an
+  // essential (it IS the burner spec), not an advanced extra. This is
+  // membership promotion — not auto-expanding the Advanced section.
+  const { essentialFields, advancedFields } = React.useMemo(() => {
+    if (node.kind !== "burner" || !fuelModeActive) {
+      return {
+        essentialFields: schema.essentials,
+        advancedFields: schema.advanced,
+      };
+    }
+    const fuelField = schema.advanced.find(
+      (f) => f.key === "fuel_mass_flow_kg_s",
+    );
+    if (!fuelField) {
+      return {
+        essentialFields: schema.essentials,
+        advancedFields: schema.advanced,
+      };
+    }
+    const essentials = [...schema.essentials];
+    const modeIdx = essentials.findIndex((f) => f.key === "spec_mode");
+    essentials.splice(modeIdx + 1, 0, fuelField);
+    return {
+      essentialFields: essentials,
+      advancedFields: schema.advanced.filter(
+        (f) => f.key !== "fuel_mass_flow_kg_s",
+      ),
+    };
+  }, [node.kind, schema, fuelModeActive]);
+
+  // The mode-INACTIVE field stays visible but disabled (text.disabled
+  // treatment + a tooltip naming which mode activates it). It is NOT a
+  // preview field — both values are persisted and solver-wired; only one
+  // is the active spec at a time.
+  const inactiveFieldKey =
+    node.kind === "burner"
+      ? fuelModeActive
+        ? "outlet_temperature_K"
+        : "fuel_mass_flow_kg_s"
+      : undefined;
+  const inactiveFieldReason = fuelModeActive
+    ? "Back-derived by the solver in fuel-ṁ mode. Active in 'Outlet T (TIT)' spec mode — switch to edit it; the stored value is retained."
+    : "Active in 'Fuel ṁ' spec mode — switch the spec mode to edit it; the stored value is retained.";
+
+  // Fuel-mass-flow mode needs a real fuel stream. Air-standard / pure-fluid
+  // projects run the burner as a heat exchanger (no combustion), so the
+  // radio is disabled with an explanatory tooltip (the backend refuses the
+  // same combination synchronously with a 422). Mirrors the backend's
+  // three forcing sources: project settings flag, burner param, pure fluid.
+  const fuelModeUnavailable =
+    node.kind === "burner" &&
+    ((project !== undefined && project.workingFluid !== "air") ||
+      project?.airStandard === true ||
+      node.params?.air_standard === true);
+  const specModeOptionDisabled = fuelModeUnavailable
+    ? {
+        fuel_mass_flow:
+          "Fuel mass-flow mode requires a combustion working fluid.",
+      }
+    : undefined;
+  // -------------------------------------------------------------------------
+
+  // ---- U9: rotor geometry presence (live mean-line messaging) -------------
+  // Read via the RAW components endpoint: the cycle page's param
+  // translation (KIND_TRANSLATIONS) deliberately does not surface
+  // geometry_params, and this panel's form schema / PATCH path must not
+  // grow it either — the candidate-detail handoff endpoint is the only
+  // writer (U8). The conditional note / chip below the efficiency-mode
+  // radio replaces the old warn-on-pick toast, which guessed.
+  const isRotor = node.kind === "compressor" || node.kind === "turbine";
+  const [geometryStatus, setGeometryStatus] =
+    React.useState<RotorGeometryStatus>({ state: "unknown" });
+  const projectId = project?.id;
+  React.useEffect(() => {
+    if (!isRotor || !projectId) return;
+    const ctrl = new AbortController();
+    void (async () => {
+      try {
+        const [components, settings] = await Promise.all([
+          getRawComponents(projectId, ctrl.signal),
+          getProjectSettings(projectId, ctrl.signal),
+        ]);
+        // The panel may have moved to another node while the fetch was in
+        // flight — a slow response for node A must not land on node B.
+        if (ctrl.signal.aborted) return;
+        const rawComp = components.find((c) => c.id === node.id);
+        const gp = rawComp?.params?.geometry_params;
+        if (
+          gp &&
+          typeof gp === "object" &&
+          !Array.isArray(gp) &&
+          Object.keys(gp).length > 0
+        ) {
+          setGeometryStatus({
+            state: "attached",
+            keyCount: Object.keys(gp).length,
+            sourceCandidateId: geometrySourceCandidateId(
+              rawComp?.params,
+              settings.active_candidate_id,
+            ),
+          });
+        } else {
+          setGeometryStatus({ state: "absent" });
+        }
+      } catch {
+        // Backend unreachable — render neither note nor chip rather than
+        // guessing at geometry presence.
+        if (!ctrl.signal.aborted) setGeometryStatus({ state: "unknown" });
+      }
+    })();
+    return () => ctrl.abort();
+  }, [isRotor, projectId, node.id]);
+
+  // Watch the in-form mode so the no-geometry note reacts as the user
+  // flips the radio, before Save.
+  const rotorEfficiencyMode = isRotor
+    ? (form.watch("efficiency_mode" as Path<Values>) as unknown as string)
+    : undefined;
+  // -------------------------------------------------------------------------
+
   // Mirror local `dirty` into the global Cycle UI store so the Run button
   // (a sibling subtree) can warn the user that the solver will run against
   // un-flushed backend values. Also drives a `beforeunload` listener so an
@@ -1262,17 +1415,30 @@ function NodeForm({
           );
         }
       }
+      // U7: fuel-mass-flow mode is fully wired — entering it seeds a
+      // kind-typical default (~0.002 kg/s, the C30-class natural-gas
+      // flow) when the field is empty, so the user lands on a solvable
+      // value instead of a zod error.
       if (node.kind === "burner" && name === "spec_mode") {
-        const mode = (
-          form.getValues() as unknown as { spec_mode?: string }
-        ).spec_mode;
-        if (mode === "fuel_mass_flow") {
-          toast.warning("Fuel-ṁ spec is preview-only", {
-            description:
-              "The cycle solver currently only consumes 'Outlet T (TIT)'. Your fuel-ṁ value will save but won't drive η.",
-          });
+        const vals = form.getValues() as unknown as {
+          spec_mode?: string;
+          fuel_mass_flow_kg_s?: number;
+        };
+        if (vals.spec_mode === "fuel_mass_flow") {
+          const cur = vals.fuel_mass_flow_kg_s;
+          if (typeof cur !== "number" || !Number.isFinite(cur) || cur <= 0) {
+            form.setValue(
+              "fuel_mass_flow_kg_s" as Path<typeof defaults>,
+              0.002 as unknown as (typeof defaults)["fuel_mass_flow_kg_s"],
+              { shouldDirty: true, shouldValidate: true },
+            );
+          }
         }
       }
+      // U9: live_meanline no longer warns on pick — the conditional
+      // geometry note / chip below the mode radio carries the messaging
+      // (it knows whether geometry is actually attached; the old B12-era
+      // toast guessed). Polytropic keeps its preview-only warning.
       if (
         (node.kind === "compressor" || node.kind === "turbine") &&
         name === "efficiency_mode"
@@ -1285,15 +1451,15 @@ function NodeForm({
             description:
               "Cycle solver still uses isentropic η on this code path. Run the Analysis page mean-line solver for polytropic.",
           });
-        } else if (mode === "live_meanline") {
-          toast.warning("Live mean-line mode requires geometry", {
-            description:
-              "Set a meanline geometry on the Analysis page first. The cycle solver only consults the live η when geometry is attached.",
-          });
         }
       }
     });
-    return () => sub.unsubscribe();
+    return () => {
+      sub.unsubscribe();
+      // The 300 ms "needs re-solve" timer would otherwise fire setState
+      // after unmount (or after the panel re-keyed to another node).
+      if (debounce.current) clearTimeout(debounce.current);
+    };
   }, [form, node.kind, defaults]);
 
   const submit = form.handleSubmit(
@@ -1430,16 +1596,36 @@ function NodeForm({
       )}
 
       {/* --- Essentials --- */}
-      {schema.essentials.length > 0 && (
+      {essentialFields.length > 0 && (
         <FormSection title="Essentials">
-          {schema.essentials.map((f) => (
-            <FieldRenderer key={f.key} field={f} form={form} />
+          {essentialFields.map((f) => (
+            <React.Fragment key={f.key}>
+              <FieldRenderer
+                field={f}
+                form={form}
+                disabled={f.key === inactiveFieldKey}
+                disabledReason={
+                  f.key === inactiveFieldKey ? inactiveFieldReason : undefined
+                }
+                optionDisabled={
+                  f.key === "spec_mode" ? specModeOptionDisabled : undefined
+                }
+              />
+              {/* U9: conditional geometry messaging below the mode radio. */}
+              {f.key === "efficiency_mode" && isRotor && (
+                <RotorGeometryNote
+                  kind={node.kind as "compressor" | "turbine"}
+                  mode={rotorEfficiencyMode}
+                  status={geometryStatus}
+                />
+              )}
+            </React.Fragment>
           ))}
         </FormSection>
       )}
 
       {/* --- Advanced (collapsed) --- */}
-      {schema.advanced.length > 0 && (
+      {advancedFields.length > 0 && (
         <FormSection
           title="Advanced"
           collapsible
@@ -1447,8 +1633,16 @@ function NodeForm({
           onToggle={() => setShowAdvanced((v) => !v)}
         >
           {showAdvanced &&
-            schema.advanced.map((f) => (
-              <FieldRenderer key={f.key} field={f} form={form} />
+            advancedFields.map((f) => (
+              <FieldRenderer
+                key={f.key}
+                field={f}
+                form={form}
+                disabled={f.key === inactiveFieldKey}
+                disabledReason={
+                  f.key === inactiveFieldKey ? inactiveFieldReason : undefined
+                }
+              />
             ))}
         </FormSection>
       )}
@@ -1531,6 +1725,94 @@ function NodeForm({
 }
 
 /* ---------------------------------------------------------------------------
+ * U9 — rotor geometry messaging below the efficiency-mode radio.
+ * ------------------------------------------------------------------------- */
+
+type RotorGeometryStatus =
+  | { state: "unknown" }
+  | { state: "absent" }
+  | { state: "attached"; keyCount: number; sourceCandidateId?: string };
+
+/**
+ * Provenance for the geometry chip. Prefers the per-component
+ * `geometry_source_candidate_id` param written by send-to-cycle (exact
+ * provenance for the geometry actually attached) over the project-level pin
+ * (`active_candidate_id`), which may name a different candidate than the
+ * one sent. The params key is optional — projects written before it existed
+ * fall back to the pin.
+ *
+ * Mirrored (plain JS) by src/__tests__/efficiency-sources.test.mjs.
+ */
+function geometrySourceCandidateId(
+  params: Record<string, unknown> | undefined,
+  activeCandidateId: unknown,
+): string | undefined {
+  const fromParams = params?.geometry_source_candidate_id;
+  if (typeof fromParams === "string" && fromParams) return fromParams;
+  return typeof activeCandidateId === "string" && activeCandidateId
+    ? activeCandidateId
+    : undefined;
+}
+
+/**
+ * Conditional messaging for the live mean-line mode (replaces the B12-era
+ * warn-on-pick toast):
+ *   - geometry attached → a read-only chip (key count + source candidate
+ *     when one is pinned), shown regardless of the selected mode;
+ *   - no geometry AND live mean-line selected → an info note pointing at
+ *     the candidate-detail handoff;
+ *   - presence unknown (backend unreachable) → nothing, rather than a
+ *     guess.
+ */
+function RotorGeometryNote({
+  kind,
+  mode,
+  status,
+}: {
+  kind: "compressor" | "turbine";
+  mode?: string;
+  status: RotorGeometryStatus;
+}) {
+  if (status.state === "attached") {
+    return (
+      <div className="flex items-center gap-1.5 self-start rounded-sm border border-border-subtle bg-surface-subtle/60 px-2 py-1 text-[11px] text-text-muted">
+        <Box className="h-3 w-3 shrink-0" aria-hidden="true" />
+        <span>
+          Geometry attached · {status.keyCount}{" "}
+          {status.keyCount === 1 ? "key" : "keys"}
+          {status.sourceCandidateId && (
+            <>
+              {" · candidate "}
+              <span className="font-mono">
+                {status.sourceCandidateId.slice(0, 8)}
+              </span>
+            </>
+          )}
+        </span>
+      </div>
+    );
+  }
+  if (status.state === "absent" && mode === "live_meanline") {
+    return (
+      <div className="flex items-start gap-2 rounded-sm border border-border-subtle bg-surface-subtle/40 p-2 text-[11px] leading-snug text-text">
+        <Info
+          className="mt-0.5 h-3.5 w-3.5 shrink-0 text-text-muted"
+          aria-hidden="true"
+        />
+        <span>
+          {kind === "compressor"
+            ? "Live mean-line needs compressor geometry — open a candidate in Flow Path and use “Send to cycle”."
+            : "Live mean-line needs turbine geometry attached to this component — no geometry is attached."}{" "}
+          Until then the solve falls back to constant isentropic η, and the
+          result panel flags the fallback.
+        </span>
+      </div>
+    );
+  }
+  return null;
+}
+
+/* ---------------------------------------------------------------------------
  * Section + field primitives
  * ------------------------------------------------------------------------- */
 
@@ -1575,14 +1857,32 @@ function FormSection({
 function FieldRenderer<TValues extends FieldValues>({
   field,
   form,
+  disabled,
+  disabledReason,
+  optionDisabled,
 }: {
   field: ParamField;
   form: UseFormReturn<TValues>;
+  /** Mode-inactive treatment (U7): visible, text.disabled, tooltip. */
+  disabled?: boolean;
+  disabledReason?: string;
+  /** Per-option disable map for radio fields: value → tooltip reason. */
+  optionDisabled?: Record<string, string>;
 }) {
   const kind = field.kind ?? "quantity";
   if (kind === "select") return <SelectField field={field} form={form} />;
-  if (kind === "radio") return <RadioField field={field} form={form} />;
-  return <FormQuantityField field={field} form={form} />;
+  if (kind === "radio")
+    return (
+      <RadioField field={field} form={form} optionDisabled={optionDisabled} />
+    );
+  return (
+    <FormQuantityField
+      field={field}
+      form={form}
+      disabled={disabled}
+      disabledReason={disabledReason}
+    />
+  );
 }
 
 function SelectField<TValues extends FieldValues>({
@@ -1624,9 +1924,12 @@ function SelectField<TValues extends FieldValues>({
 function RadioField<TValues extends FieldValues>({
   field,
   form,
+  optionDisabled,
 }: {
   field: ParamField;
   form: UseFormReturn<TValues>;
+  /** value → tooltip reason for options that can't be picked here. */
+  optionDisabled?: Record<string, string>;
 }) {
   const value = form.watch(field.key as Path<TValues>) as unknown as string;
   const set = (v: string) =>
@@ -1644,6 +1947,30 @@ function RadioField<TValues extends FieldValues>({
       >
         {(field.options ?? []).map((o) => {
           const active = value === o.value;
+          const reason = optionDisabled?.[o.value];
+          if (reason) {
+            // Disabled-but-discoverable: keep the button focusable
+            // (aria-disabled, not the `disabled` attribute, which would
+            // drop it from the tab order) so the explanatory tooltip
+            // fires on hover AND keyboard focus.
+            return (
+              <Tooltip key={o.value}>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    role="radio"
+                    aria-checked={active}
+                    aria-disabled="true"
+                    onClick={(e) => e.preventDefault()}
+                    className="cursor-not-allowed rounded-sm px-2 py-0.5 text-xs font-medium text-text-disabled"
+                  >
+                    {o.label}
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent>{reason}</TooltipContent>
+              </Tooltip>
+            );
+          }
           return (
             <button
               key={o.value}
@@ -1670,9 +1997,14 @@ function RadioField<TValues extends FieldValues>({
 function FormQuantityField<TValues extends FieldValues>({
   field,
   form,
+  disabled,
+  disabledReason,
 }: {
   field: ParamField;
   form: UseFormReturn<TValues>;
+  /** Mode-inactive treatment (U7): visible, text.disabled, tooltip. */
+  disabled?: boolean;
+  disabledReason?: string;
 }) {
   const value = form.watch(field.key as Path<TValues>) as unknown as number;
   const error = form.formState.errors[field.key]?.message as string | undefined;
@@ -1705,21 +2037,48 @@ function FormQuantityField<TValues extends FieldValues>({
     }
     setUnit(next);
   };
+  const input = (
+    <QuantityInput
+      id={`f-${field.key}`}
+      value={value}
+      unit={unit}
+      units={field.units}
+      onValueChange={set}
+      onUnitChange={onUnitChange}
+      min={field.min}
+      max={field.max}
+      step={field.step}
+      error={disabled ? undefined : error}
+      disabled={disabled}
+    />
+  );
+  if (disabled && disabledReason) {
+    // Mode-inactive field (U7): stays visible with the text.disabled token
+    // treatment so the retained value is never hidden, and the wrapper is
+    // focusable so the "which mode activates this" tooltip fires on hover
+    // AND keyboard focus (a disabled <input> drops out of the tab order).
+    return (
+      <div className="flex flex-col gap-1">
+        <FieldLabel field={field} disabled />
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <div
+              tabIndex={0}
+              aria-label={`${field.label} (inactive in this spec mode)`}
+              className="rounded-sm outline-none focus-visible:ring-1 focus-visible:ring-border-default [&_input]:text-text-disabled"
+            >
+              {input}
+            </div>
+          </TooltipTrigger>
+          <TooltipContent>{disabledReason}</TooltipContent>
+        </Tooltip>
+      </div>
+    );
+  }
   return (
     <div className="flex flex-col gap-1">
       <FieldLabel field={field} />
-      <QuantityInput
-        id={`f-${field.key}`}
-        value={value}
-        unit={unit}
-        units={field.units}
-        onValueChange={set}
-        onUnitChange={onUnitChange}
-        min={field.min}
-        max={field.max}
-        step={field.step}
-        error={error}
-      />
+      {input}
     </div>
   );
 }
@@ -1759,12 +2118,25 @@ function convertDisplay(v: number, from: string, to: string): number {
   }
 }
 
-function FieldLabel({ field }: { field: ParamField }) {
+function FieldLabel({
+  field,
+  disabled,
+}: {
+  field: ParamField;
+  disabled?: boolean;
+}) {
   return (
     <Label htmlFor={`f-${field.key}`} className="flex items-center gap-1.5">
-      <span>{field.label}</span>
+      <span className={disabled ? "text-text-disabled" : undefined}>
+        {field.label}
+      </span>
       {field.symbol && (
-        <span className="font-mono text-[11px] text-text-muted">
+        <span
+          className={cn(
+            "font-mono text-[11px]",
+            disabled ? "text-text-disabled" : "text-text-muted",
+          )}
+        >
           {field.symbol}
         </span>
       )}

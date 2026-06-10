@@ -1,13 +1,14 @@
 "use client";
 
 import { use } from "react";
+import Link from "next/link";
 import { PageHeader } from "@/components/shell/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/empty-state";
 import { useProject, useProjectDisplayName, useRuns } from "@/lib/api/hooks";
 import { fmtNumber } from "@/lib/utils";
-import { ListOrdered } from "lucide-react";
+import { ArrowUpRight, ListOrdered } from "lucide-react";
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -73,10 +74,25 @@ export default function RunsPage({ params }: PageProps) {
                         }
                       >
                         {r.status}
+                        {/* U1 refusal contract: a refused run is `failed`
+                            by design, not a crash — qualify the badge. */}
+                        {r.refused ? " · refused" : ""}
                       </Badge>
                     </td>
                     <td className="px-3 py-1.5 text-text-muted">
                       {r.summary ?? "—"}
+                      {/* U8: explore runs deep-link to their best
+                          candidate's detail route. */}
+                      {r.kind === "explore" && r.bestCandidateId && (
+                        <Link
+                          href={`/projects/${id}/flowpath/${encodeURIComponent(r.bestCandidateId)}`}
+                          className="ml-2 inline-flex items-center gap-0.5 text-brand-text hover:underline"
+                          aria-label={`Open detail for best candidate of run ${r.id}`}
+                        >
+                          best candidate
+                          <ArrowUpRight className="h-3 w-3" aria-hidden />
+                        </Link>
+                      )}
                     </td>
                     <td className="px-3 py-1.5 text-right font-mono tabular-nums">
                       {typeof r.durationMs === "number"
