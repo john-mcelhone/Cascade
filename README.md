@@ -7,8 +7,6 @@
 Cycle → mean-line design → design-space exploration → performance maps → rotor dynamics,
 in a browser, from one git-diffable project.
 
-<img src="docs/assets/readme/flowpath-explorer.png" alt="Cascade flow-path explorer: Sobol' design-space scatter with filter DSL and linked 3D impeller geometry" width="100%">
-
 *The flow-path explorer at v0.1.0 — a Sobol' sweep, a filter expression, and the picked impeller in 3D.*
 
 [![License: AGPL-3.0-or-later](https://img.shields.io/badge/license-AGPL--3.0--or--later-blue)](LICENSE)
