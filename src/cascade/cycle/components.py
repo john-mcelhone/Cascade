@@ -67,7 +67,7 @@ def _refuse_high_pr(pr: float, component_name: str) -> None:
     if pr > PR_WARN_HIGH:
         msg = (
             f"{component_name}: pressure ratio {pr} > {PR_WARN_HIGH} is "
-            f"geographically uncommon; results are uncalibrated."
+            f"uncommon for single-stage machines; results are uncalibrated."
         )
         warnings.warn(msg, stacklevel=3)
 
