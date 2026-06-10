@@ -496,6 +496,48 @@ class TestCycleCosimGeometryBuilders:
         assert result is not None
         assert isinstance(result, CentrifugalCompressorGeometry)
 
+    def test_build_compressor_geometry_refuses_non_finite_value(self) -> None:
+        """ADAPT-045 strengthened: a NaN in an otherwise complete bag
+        refuses design-class, naming the key as non-finite (distinct from
+        missing). ``gp.get(k) is None`` catches only absent keys; a NaN
+        impeller radius is just as untrustworthy as a missing one."""
+        from apps.api.routers.cycle import (
+            GeometryParamsIncomplete,
+            _build_compressor_geometry,
+        )
+
+        bag = dict(_CAPSTONE_CC_GEOMETRY)
+        bag["impeller_outlet_radius"] = float("nan")
+        with pytest.raises(GeometryParamsIncomplete) as exc_info:
+            _build_compressor_geometry({"geometry_params": bag})
+        exc = exc_info.value
+        assert exc.code == "GEOMETRY_PARAMS_INCOMPLETE"
+        assert exc.component_kind == "Compressor"
+        assert exc.non_finite == ["impeller_outlet_radius"]
+        assert exc.missing == []
+        # Named as NON-FINITE, distinct from missing.
+        assert "non-finite" in str(exc).lower()
+        assert "impeller_outlet_radius" in str(exc)
+        # Same actionable suggestions as the missing-key refusal.
+        assert any("Send to cycle" in s for s in exc.suggestions)
+
+    def test_build_compressor_geometry_names_missing_and_non_finite(self) -> None:
+        """A bag that is BOTH missing a key and carrying a NaN names each
+        problem under its own label in one refusal."""
+        from apps.api.routers.cycle import (
+            GeometryParamsIncomplete,
+            _build_compressor_geometry,
+        )
+
+        bag = dict(_CAPSTONE_CC_GEOMETRY)
+        del bag["tip_clearance"]
+        bag["inducer_tip_radius"] = float("inf")
+        with pytest.raises(GeometryParamsIncomplete) as exc_info:
+            _build_compressor_geometry({"geometry_params": bag})
+        exc = exc_info.value
+        assert exc.missing == ["tip_clearance"]
+        assert exc.non_finite == ["inducer_tip_radius"]
+
     def test_build_turbine_geometry_returns_none_when_no_geom_params(
         self,
     ) -> None:
@@ -522,3 +564,49 @@ class TestCycleCosimGeometryBuilders:
         assert exc.component_kind == "Turbine"
         assert "rotor_inlet_radius" in str(exc)
         assert "blade_count" not in exc.missing
+        # The FULL missing set is enumerated — every required key except
+        # the one present — mirroring the compressor contract. A refusal
+        # that names only the first gap forces the user through one
+        # round-trip per field.
+        expected_missing = {
+            "rotor_inlet_radius",
+            "rotor_outlet_radius_hub",
+            "rotor_outlet_radius_tip",
+            "blade_height_inlet",
+            "blade_height_outlet",
+            "inlet_metal_angle_rad",
+            "exducer_angle_rad",
+            "tip_clearance",
+        }
+        assert set(exc.missing) == expected_missing
+        for key in expected_missing:
+            assert key in str(exc)
+
+    def test_build_turbine_geometry_refuses_non_finite_value(self) -> None:
+        """Symmetric with the compressor builder: a non-finite value in an
+        otherwise complete turbine bag refuses design-class — including
+        when the NaN hides inside a {value, unit} quantity dict."""
+        from apps.api.routers.cycle import (
+            GeometryParamsIncomplete,
+            _build_turbine_geometry,
+        )
+
+        bag: Dict[str, Any] = {
+            "rotor_inlet_radius": {"value": float("nan"), "unit": "m"},
+            "rotor_outlet_radius_hub": 0.012,
+            "rotor_outlet_radius_tip": 0.028,
+            "blade_height_inlet": 0.006,
+            "blade_height_outlet": 0.016,
+            "blade_count": 12,
+            "inlet_metal_angle_rad": 0.0,
+            "exducer_angle_rad": math.pi / 3,
+            "tip_clearance": 1.5e-4,
+        }
+        with pytest.raises(GeometryParamsIncomplete) as exc_info:
+            _build_turbine_geometry({"geometry_params": bag})
+        exc = exc_info.value
+        assert exc.code == "GEOMETRY_PARAMS_INCOMPLETE"
+        assert exc.component_kind == "Turbine"
+        assert exc.non_finite == ["rotor_inlet_radius"]
+        assert exc.missing == []
+        assert "non-finite" in str(exc).lower()

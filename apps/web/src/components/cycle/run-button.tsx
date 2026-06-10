@@ -28,11 +28,17 @@ export function RunButton({ projectId, className }: RunButtonProps) {
   const finishRun = useCycleUiStore((s) => s.finishRun);
   const resetRun = useCycleUiStore((s) => s.resetRun);
 
-  const cancelRef = React.useRef(false);
+  // Monotonic run token. Each invocation captures its own token at start;
+  // cancelling (or starting a newer run) bumps the counter, so a
+  // still-draining SSE loop from an earlier run fails the staleness check
+  // and returns silently instead of overwriting the newer run's store
+  // state (a single shared boolean reset on the next run let exactly that
+  // race happen — the old loop could even mark the new run failed).
+  const runTokenRef = React.useRef(0);
 
   const onClick = async () => {
     if (status === "running") {
-      cancelRef.current = true;
+      runTokenRef.current += 1; // invalidate the in-flight loop
       resetRun();
       toast.message("Run cancelled.");
       return;
@@ -48,14 +54,18 @@ export function RunButton({ projectId, className }: RunButtonProps) {
       });
       return;
     }
-    cancelRef.current = false;
+    const token = ++runTokenRef.current;
+    const stale = () => token !== runTokenRef.current;
     const api = getApiClient();
     try {
       const { jobId } = await api.solveCycle(projectId);
+      if (stale()) return;
       startRun(jobId);
       const stream = api.streamJob(jobId);
       for await (const ev of stream) {
-        if (cancelRef.current) break;
+        // Every store mutation below is guarded by this per-iteration
+        // staleness check (no awaits between here and the mutations).
+        if (stale()) return;
         pushRunEvent({
           progress: ev.progress,
           iteration: ev.iteration,
@@ -104,6 +114,9 @@ export function RunButton({ projectId, className }: RunButtonProps) {
         }
       }
     } catch (err) {
+      // A stale loop's failure (e.g. its SSE stream torn down after cancel
+      // or after a newer run started) must not mark the current run failed.
+      if (stale()) return;
       finishRun("failed");
       toast.error("Run failed.", {
         description: (err as Error).message,

@@ -228,27 +228,15 @@ def _resolve_routed_candidate_geometry(
     return geom, name
 
 
-@router.get("", response_model=ManufacturabilityResponse)
-def get_manufacturability(
-    project_id: str,
-    candidate_id: Optional[str] = Query(
-        default=None,
-        description=(
-            "Check this specific exploration candidate instead of the "
-            "pinned/latest-VALID heuristic. 404 when unknown or expired."
-        ),
-    ),
+def _run_check(
+    project_id: str, candidate_id: Optional[str] = None
 ) -> ManufacturabilityResponse:
-    """Run the manufacturability check on the project's active candidate.
+    """Shared check logic for the GET and PUT endpoints.
 
-    Pulls per-project overrides from
-    ``project.settings.manufacturability_overrides`` and merges them into the
-    rule set. Returns the report JSON with full violation / pass detail.
-
-    With ``candidate_id`` (U8 — candidate detail page) the check runs on
-    that candidate's merged geometry; otherwise the active candidate is
-    resolved via ``settings.active_candidate_id`` or the latest VALID
-    candidate of the most recent exploration job.
+    Plain function (no FastAPI parameter defaults) so internal callers can
+    invoke it directly: calling the GET *endpoint* function from Python
+    would leak its ``Query(None)`` default object into the candidate
+    lookup and 404 every time.
     """
     project = get_project_or_404(project_id)
     machine_class = _resolve_machine_class(project)
@@ -293,12 +281,43 @@ def get_manufacturability(
     return ManufacturabilityResponse.model_validate(payload)
 
 
+@router.get("", response_model=ManufacturabilityResponse)
+def get_manufacturability(
+    project_id: str,
+    candidate_id: Optional[str] = Query(
+        default=None,
+        description=(
+            "Check this specific exploration candidate instead of the "
+            "pinned/latest-VALID heuristic. 404 when unknown or expired."
+        ),
+    ),
+) -> ManufacturabilityResponse:
+    """Run the manufacturability check on the project's active candidate.
+
+    Pulls per-project overrides from
+    ``project.settings.manufacturability_overrides`` and merges them into the
+    rule set. Returns the report JSON with full violation / pass detail.
+
+    With ``candidate_id`` (U8 — candidate detail page) the check runs on
+    that candidate's merged geometry; otherwise the active candidate is
+    resolved via ``settings.active_candidate_id`` or the latest VALID
+    candidate of the most recent exploration job.
+    """
+    return _run_check(project_id, candidate_id)
+
+
 @router.put("/overrides", response_model=ManufacturabilityResponse)
 def put_overrides(
     project_id: str,
     req: OverridesRequest = Body(default_factory=OverridesRequest),
 ) -> ManufacturabilityResponse:
-    """Persist a per-project rule-override map and re-run the check."""
+    """Persist a per-project rule-override map and re-run the check.
+
+    The re-run resolves the active candidate with ``candidate_id=None``
+    semantics (pinned / latest-VALID heuristic), via the shared
+    :func:`_run_check` — never by calling the GET endpoint function, whose
+    ``Query`` default would otherwise leak into the candidate lookup.
+    """
     project = get_project_or_404(project_id)
     settings = dict(project.get("settings", {}) or {})
     # Strip out any non-float entries before saving.
@@ -311,4 +330,4 @@ def put_overrides(
     settings["manufacturability_overrides"] = sanitized
     project["settings"] = settings
     PROJECTS.save(project_id)
-    return get_manufacturability(project_id)
+    return _run_check(project_id)

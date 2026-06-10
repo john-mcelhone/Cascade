@@ -8,13 +8,17 @@ Cycle page:
   r2-scaling, candidate-scaled rpm) onto the project's Compressor component
   as plain SI floats — never the bare 3 sampled params.
 - The write REPLACES ``geometry_params`` wholesale (stale keys cannot
-  survive) and saves through to the TOML store (restart survival).
+  survive), records provenance under ``geometry_source_candidate_id``,
+  and saves through to the TOML store (restart survival).
 - Default-on operating-point alignment sets the compressor pressure_ratio
   and the project boundary-condition mass flow to the candidate's design
-  point; without alignment both are untouched.
+  point, and rebalances the Turbine pressure_ratio through the project's
+  pressure-drop chain (the capstone_c30 identity) so the next solve stays
+  solvable; without alignment all three are untouched.
 - Refusals: no Compressor on the canvas → synchronous 422 design-class;
   unknown candidate → 404; cross-project candidate → 404 (presents as
-  not-found, mirroring the detail route guard).
+  not-found, mirroring the detail route guard); a failed alignment solve
+  or a non-finite merged geometry → 422 with NOTHING mutated.
 - "Pin as active candidate" persists ``settings.active_candidate_id`` plus
   a params snapshot to TOML (candidates are ephemeral; pins persist).
 - ``GET .../manufacturability?candidate_id=`` checks the routed candidate's
@@ -157,6 +161,11 @@ async def test_handoff_writes_full_merged_geometry_as_plain_floats(app):
         assert comp["params"]["meanline_rpm_rpm"] == pytest.approx(op["rpm"])
         assert isinstance(comp["params"]["meanline_rpm_rpm"], float)
 
+        # Provenance: the handoff records its source candidate as a plain
+        # string — the UI chip reads exactly this key to attribute the
+        # geometry.
+        assert comp["params"]["geometry_source_candidate_id"] == best_id
+
 
 @pytest.mark.asyncio
 async def test_merged_geometry_endpoint_matches_handoff_write(app):
@@ -287,12 +296,32 @@ async def test_alignment_sets_pr_and_bc_mass_flow_to_design_point(app):
 
         # The Inlet component mirror stays consistent with the BC.
         r = await client.get(f"/api/projects/{MICRO}/components")
-        inlet_comp = next(
-            c for c in r.json()["components"] if c["kind"] == "Inlet"
-        )
+        components = r.json()["components"]
+        inlet_comp = next(c for c in components if c["kind"] == "Inlet")
         assert inlet_comp["params"]["mass_flow"]["value"] == pytest.approx(
             op["mass_flow_kg_per_s"]
         )
+
+        # The Turbine PR is rebalanced through the project's own
+        # pressure-drop chain (the capstone_c30 identity: 1 atm in, 1 atm
+        # out) so the aligned compressor PR cannot leave the turbine
+        # over-expanding (OPEN_CYCLE_SUB_ATMOSPHERIC).
+        by_kind = {c["kind"]: c.get("params", {}) for c in components}
+        pr_c = float(result.pressure_ratio_tt)
+        p_burner_out_atm = (
+            (1.0 - by_kind["ConstantPressureLoss"]["pressure_drop_fraction"])
+            * pr_c
+            * (1.0 - by_kind["Recuperator"]["cold_pressure_drop_fraction"])
+            * (1.0 - by_kind["Burner"]["pressure_drop_fraction"])
+        )
+        expected_pr_t = p_burner_out_atm * (
+            1.0 - by_kind["Recuperator"]["hot_pressure_drop_fraction"]
+        )
+        turbine = next(c for c in components if c["kind"] == "Turbine")
+        assert turbine["params"]["pressure_ratio"] == pytest.approx(
+            expected_pr_t
+        )
+        assert body["turbine_pressure_ratio"] == pytest.approx(expected_pr_t)
 
 
 @pytest.mark.asyncio
@@ -303,6 +332,11 @@ async def test_no_alignment_leaves_pr_and_bc_untouched(app):
         pr_before = comp_before["params"]["pressure_ratio"]
         proj_before = (await client.get(f"/api/projects/{MICRO}")).json()
         mdot_before = proj_before["boundary_conditions"]["mass_flow"]
+        r = await client.get(f"/api/projects/{MICRO}/components")
+        turbine_before = next(
+            c for c in r.json()["components"] if c["kind"] == "Turbine"
+        )
+        turbine_pr_before = turbine_before["params"]["pressure_ratio"]
 
         job = await _run_explore(client, MICRO)
         best_id = job["result"]["best_id"]
@@ -315,6 +349,7 @@ async def test_no_alignment_leaves_pr_and_bc_untouched(app):
         body = resp.json()
         assert body["aligned"] is False
         assert body["pressure_ratio"] is None
+        assert body["turbine_pressure_ratio"] is None
 
         comp_after = await _get_compressor(client, MICRO)
         assert comp_after["params"]["pressure_ratio"] == pr_before
@@ -322,6 +357,12 @@ async def test_no_alignment_leaves_pr_and_bc_untouched(app):
         assert "geometry_params" in comp_after["params"]
         proj_after = (await client.get(f"/api/projects/{MICRO}")).json()
         assert proj_after["boundary_conditions"]["mass_flow"] == mdot_before
+        # The Turbine PR is untouched without alignment.
+        r = await client.get(f"/api/projects/{MICRO}/components")
+        turbine_after = next(
+            c for c in r.json()["components"] if c["kind"] == "Turbine"
+        )
+        assert turbine_after["params"]["pressure_ratio"] == turbine_pr_before
 
 
 # ---------------------------------------------------------------------------
@@ -415,6 +456,96 @@ async def test_handoff_non_valid_candidate_refuses_422(app):
         assert resp.json()["detail"]["error_code"] == "CANDIDATE_NOT_VALID"
 
 
+@pytest.mark.asyncio
+async def test_alignment_solve_failure_leaves_project_unmutated(app, monkeypatch):
+    """ALIGNMENT_SOLVE_FAILED is a pure refusal: nothing sticks.
+
+    Regression: the endpoint used to write ``geometry_params`` and
+    ``meanline_rpm_rpm`` into the cached project BEFORE running the
+    alignment solve, so a 422 left the rejected geometry attached in
+    memory — and any later unrelated save persisted it. Validation must
+    complete before the first mutation.
+    """
+    import copy
+
+    import routers.candidates as candidates_mod
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://t") as client:
+        job = await _run_explore(client, MICRO)
+        best_id = job["result"]["best_id"]
+
+        comp_before = copy.deepcopy(await _get_compressor(client, MICRO))
+        proj_before = copy.deepcopy(
+            (await client.get(f"/api/projects/{MICRO}")).json()
+        )
+
+        def _boom(geom, op):  # noqa: ANN001
+            raise RuntimeError("forced alignment-solve failure")
+
+        monkeypatch.setattr(candidates_mod, "_design_point_solve", _boom)
+
+        resp = await client.post(
+            f"/api/candidates/{best_id}/send-to-cycle",
+            json={"project_id": MICRO, "align_operating_point": True},
+        )
+        assert resp.status_code == 422, resp.text
+        detail = resp.json()["detail"]
+        assert detail["error_code"] == "ALIGNMENT_SOLVE_FAILED"
+
+        # The Compressor bag is byte-identical to before the call — the
+        # rejected geometry never touched the cached project.
+        comp_after = await _get_compressor(client, MICRO)
+        assert comp_after == comp_before
+        assert "geometry_params" not in comp_after["params"]
+        assert "geometry_source_candidate_id" not in comp_after["params"]
+        # ...and the whole project dict (BC mass flow, turbine PR, all
+        # components) is untouched too.
+        proj_after = (await client.get(f"/api/projects/{MICRO}")).json()
+        assert proj_after == proj_before
+
+
+@pytest.mark.asyncio
+async def test_handoff_nonfinite_merged_geometry_refuses_422(app, monkeypatch):
+    """A NaN from a degenerate merge refuses — never written to the bag.
+
+    The serialization loop in ``_merged_cc_geometry`` guards every field
+    with ``math.isfinite``; the 422 names the offending field so the user
+    can see which dimension degenerated.
+    """
+    import dataclasses as dc
+
+    import routers._meanline_geom as mg
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://t") as client:
+        job = await _run_explore(client, MICRO)
+        best_id = job["result"]["best_id"]
+
+        real_build = mg.build_cc_geometry
+
+        def _nan_build(sample=None, project_params=None):  # noqa: ANN001
+            geom, op = real_build(sample=sample, project_params=project_params)
+            # NaN survives the dataclass's own range checks (NaN < 0 is
+            # False) — exactly the silent-poison path the guard closes.
+            return dc.replace(geom, tip_clearance=float("nan")), op
+
+        monkeypatch.setattr(mg, "build_cc_geometry", _nan_build)
+
+        resp = await client.post(
+            f"/api/candidates/{best_id}/send-to-cycle",
+            json={"project_id": MICRO},
+        )
+        assert resp.status_code == 422, resp.text
+        detail = resp.json()["detail"]
+        assert detail["error_code"] == "CANDIDATE_GEOMETRY_INVALID"
+        assert "tip_clearance" in detail["message"]
+
+        # Nothing landed in the bag.
+        comp = await _get_compressor(client, MICRO)
+        assert "geometry_params" not in comp["params"]
+
+
 # ---------------------------------------------------------------------------
 # Persistence: pins persist; the handoff survives a restart
 # ---------------------------------------------------------------------------
@@ -477,6 +608,8 @@ async def test_handoff_survives_projects_reload(app):
         assert comp["params"]["pressure_ratio"] == pytest.approx(
             sent["pressure_ratio"]
         )
+        # Provenance survives the round-trip as a plain string.
+        assert comp["params"]["geometry_source_candidate_id"] == best_id
 
 
 @pytest.mark.asyncio
@@ -572,6 +705,38 @@ async def test_manufacturability_unknown_candidate_404(app):
         assert resp.status_code == 404
 
 
+@pytest.mark.asyncio
+async def test_put_manufacturability_overrides_returns_report(app):
+    """PUT /overrides persists the map and re-runs the check — 200, never 404.
+
+    Regression: the PUT handler used to delegate to the GET *endpoint*
+    function, whose ``Query(None)`` default object leaked into the
+    candidate lookup (``CANDIDATE_INDEX.get(<Query>)``) and 404'd every
+    call. The override path must resolve with candidate_id=None semantics.
+    """
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://t") as client:
+        resp = await client.put(
+            f"/api/projects/{MICRO}/manufacturability/overrides",
+            json={"overrides": {"le_thickness_min": 0.05e-3}},
+        )
+        assert resp.status_code == 200, resp.text
+        report = resp.json()
+        # The override is echoed as applied to the rule set.
+        assert report["overrides_used"]["le_thickness_min"] == pytest.approx(
+            0.05e-3
+        )
+        # No candidates exist on the fresh seed → defaults fallback.
+        assert report["candidate_id"] is None
+
+        # The map persisted: a plain GET re-applies it.
+        again = await client.get(f"/api/projects/{MICRO}/manufacturability")
+        assert again.status_code == 200, again.text
+        assert again.json()["overrides_used"][
+            "le_thickness_min"
+        ] == pytest.approx(0.05e-3)
+
+
 # ---------------------------------------------------------------------------
 # Jobs list (runs page wiring)
 # ---------------------------------------------------------------------------
@@ -609,6 +774,14 @@ async def test_jobs_list_scopes_by_project_and_shows_refusal_failed(app):
             == explore_job["result"]["best_id"]
         )
 
-        # Unscoped list still returns everything (legacy behaviour).
+        # Unscoped list still returns everything (legacy behaviour),
+        # newest first — the runs page reads top-down. The explore job was
+        # created after the refused cycle run, so it must lead.
         all_jobs = (await client.get("/api/jobs")).json()
         assert len(all_jobs) == 2
+        assert [j["id"] for j in all_jobs] == [
+            micro_jobs[0]["id"],
+            aero_jobs[0]["id"],
+        ]
+        created = [j["created_at"] for j in all_jobs]
+        assert created == sorted(created, reverse=True)

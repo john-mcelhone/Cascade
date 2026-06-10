@@ -167,15 +167,37 @@ async function flowPathJson<T>(
     } catch {
       detail = undefined;
     }
+    // FastAPI's error body is {detail: ...} where detail is either a
+    // plain string or a structured dict ({error_code, message, ...}).
+    // Mirrors fetchJson's extraction in client.ts: string detail passes
+    // through, structured detail prefers `message`, any other dict is
+    // JSON-stringified — never "[object Object]".
     const d = detail as { detail?: unknown } | undefined;
-    const inner = d?.detail as
-      | { message?: string }
-      | string
-      | undefined;
-    const message =
-      typeof inner === "string"
-        ? inner
-        : (inner?.message ?? `HTTP ${r.status}`);
+    let message = `HTTP ${r.status}`;
+    if (typeof detail === "string" && detail) {
+      message = detail;
+    } else if (
+      typeof detail === "object" &&
+      detail !== null &&
+      "detail" in detail
+    ) {
+      const inner = (detail as { detail: unknown }).detail;
+      if (typeof inner === "string") {
+        message = inner;
+      } else if (
+        inner !== null &&
+        typeof inner === "object" &&
+        typeof (inner as { message?: unknown }).message === "string"
+      ) {
+        message = (inner as { message: string }).message;
+      } else if (inner != null) {
+        try {
+          message = JSON.stringify(inner);
+        } catch {
+          /* keep the HTTP fallback */
+        }
+      }
+    }
     throw new FlowPathApiError(r.status, message, d?.detail);
   }
   if (r.status === 204) return undefined as unknown as T;

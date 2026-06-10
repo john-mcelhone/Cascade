@@ -278,6 +278,89 @@ async def test_fuel_flow_zero_refuses_not_zerodivision(app):
 
 
 @pytest.mark.asyncio
+async def test_fuel_flow_negative_refuses_design_class(app):
+    """(6b) fuel < 0 → design refusal naming the burner, never a traceback."""
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        await client.get("/api/health")
+        await _patch_burner(
+            client,
+            MICRO,
+            {
+                "spec_mode": "fuel_mass_flow",
+                "fuel_mass_flow": {"value": -1e-9, "unit": "kg/s"},
+            },
+        )
+
+        job = await _solve(client, MICRO)
+
+        failure = _assert_design_refusal(job)
+        assert "burner" in failure["title"].lower()
+        assert "positive" in failure["plain_english"].lower()
+
+
+@pytest.mark.asyncio
+async def test_fuel_flow_nan_refuses_design_class(app):
+    """(6c) fuel = NaN → design refusal naming the burner, never a traceback.
+
+    JSON has no NaN literal, but Python's json.loads accepts the
+    non-standard one by default, so any non-strict client (plain
+    ``json.dumps``) can land a real NaN in the params bag — httpx's own
+    encoder is strict, so the body is sent raw, exactly as such a client
+    would put it on the wire. The spec builder must refuse it
+    design-class. If the server transport ever turns strict, fall back to
+    exercising ``_burner_fuel_mass_flow_quantity`` directly.
+    """
+    import math
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        await client.get("/api/health")
+        burner = await _component(client, MICRO, "Burner")
+        resp = await client.patch(
+            f"/api/projects/{MICRO}/components/{burner['id']}",
+            # Raw float (already kg/s) — the builder accepts both forms; a
+            # {value, unit} dict cannot carry NaN any further than this
+            # transport anyway.
+            content=(
+                '{"params": {"spec_mode": "fuel_mass_flow", '
+                '"fuel_mass_flow": NaN}}'
+            ),
+            headers={"Content-Type": "application/json"},
+        )
+        if resp.status_code != 200:
+            # Strict transport: NaN never reached the params bag. Cover the
+            # validation seam directly instead.
+            from routers.cycle import (  # noqa: PLC0415
+                BurnerSpecInvalid,
+                _burner_fuel_mass_flow_quantity,
+            )
+
+            with pytest.raises(BurnerSpecInvalid) as exc_info:
+                _burner_fuel_mass_flow_quantity(
+                    {"fuel_mass_flow": float("nan")}
+                )
+            assert "positive" in str(exc_info.value)
+            return
+
+        # The NaN really landed on the bag (not silently dropped/coerced).
+        # Inspect the store directly: the REST read-back serializes NaN as
+        # null (pydantic's ser_json_inf_nan), which would mask the value.
+        bp = next(
+            c
+            for c in jobs.PROJECTS[MICRO]["components"]
+            if c["kind"] == "Burner"
+        )["params"]
+        assert math.isnan(float(bp["fuel_mass_flow"]))
+
+        job = await _solve(client, MICRO)
+
+        failure = _assert_design_refusal(job)
+        assert "burner" in failure["title"].lower()
+        assert "positive" in failure["plain_english"].lower()
+
+
+@pytest.mark.asyncio
 async def test_excess_fuel_derived_tit_above_limit_refuses(app):
     """(7) derived TIT > 2100 K → RegimeOutOfValidity, design class,
     suggestion mentions reducing the fuel flow."""
@@ -362,6 +445,39 @@ async def test_fuel_mode_on_air_standard_flag_project_422(app):
         detail = resp.json()["detail"]
         assert detail["error_code"] == "FUEL_MODE_REQUIRES_COMBUSTION"
         assert "settings.air_standard" in detail["forced_by"]
+
+
+@pytest.mark.asyncio
+async def test_fuel_mode_on_per_burner_air_standard_flag_422(app):
+    """(8c) per-burner params.air_standard=true + fuel mode → synchronous
+    422 (the third forcing source — the project flag and pure-fluid cases
+    are covered by 8a/8b)."""
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        await client.get("/api/health")
+        await _patch_burner(
+            client,
+            MICRO,
+            {
+                "air_standard": True,
+                "spec_mode": "fuel_mass_flow",
+                "fuel_mass_flow": {"value": 0.002, "unit": "kg/s"},
+            },
+        )
+
+        resp = await client.post(f"/api/projects/{MICRO}/cycle/solve")
+
+        assert resp.status_code == 422, resp.text
+        detail = resp.json()["detail"]
+        assert detail["error_code"] == "FUEL_MODE_REQUIRES_COMBUSTION"
+        assert "burner.params.air_standard" in detail["forced_by"]
+        # Forced by the per-burner flag alone — not the project flag, not
+        # a pure-fluid working medium.
+        assert detail["forced_by"] == ["burner.params.air_standard"]
+        # Synchronous: no job was created for this refusal.
+        jobs_resp = await client.get(f"/api/jobs?project_id={MICRO}")
+        assert jobs_resp.status_code == 200
+        assert jobs_resp.json() == []
 
 
 # ---------------------------------------------------------------------------

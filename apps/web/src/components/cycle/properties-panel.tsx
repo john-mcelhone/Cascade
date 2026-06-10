@@ -1315,6 +1315,9 @@ function NodeForm({
           getRawComponents(projectId, ctrl.signal),
           getProjectSettings(projectId, ctrl.signal),
         ]);
+        // The panel may have moved to another node while the fetch was in
+        // flight — a slow response for node A must not land on node B.
+        if (ctrl.signal.aborted) return;
         const rawComp = components.find((c) => c.id === node.id);
         const gp = rawComp?.params?.geometry_params;
         if (
@@ -1323,12 +1326,13 @@ function NodeForm({
           !Array.isArray(gp) &&
           Object.keys(gp).length > 0
         ) {
-          const active = settings.active_candidate_id;
           setGeometryStatus({
             state: "attached",
             keyCount: Object.keys(gp).length,
-            sourceCandidateId:
-              typeof active === "string" ? active : undefined,
+            sourceCandidateId: geometrySourceCandidateId(
+              rawComp?.params,
+              settings.active_candidate_id,
+            ),
           });
         } else {
           setGeometryStatus({ state: "absent" });
@@ -1450,7 +1454,12 @@ function NodeForm({
         }
       }
     });
-    return () => sub.unsubscribe();
+    return () => {
+      sub.unsubscribe();
+      // The 300 ms "needs re-solve" timer would otherwise fire setState
+      // after unmount (or after the panel re-keyed to another node).
+      if (debounce.current) clearTimeout(debounce.current);
+    };
   }, [form, node.kind, defaults]);
 
   const submit = form.handleSubmit(
@@ -1723,6 +1732,27 @@ type RotorGeometryStatus =
   | { state: "unknown" }
   | { state: "absent" }
   | { state: "attached"; keyCount: number; sourceCandidateId?: string };
+
+/**
+ * Provenance for the geometry chip. Prefers the per-component
+ * `geometry_source_candidate_id` param written by send-to-cycle (exact
+ * provenance for the geometry actually attached) over the project-level pin
+ * (`active_candidate_id`), which may name a different candidate than the
+ * one sent. The params key is optional — projects written before it existed
+ * fall back to the pin.
+ *
+ * Mirrored (plain JS) by src/__tests__/efficiency-sources.test.mjs.
+ */
+function geometrySourceCandidateId(
+  params: Record<string, unknown> | undefined,
+  activeCandidateId: unknown,
+): string | undefined {
+  const fromParams = params?.geometry_source_candidate_id;
+  if (typeof fromParams === "string" && fromParams) return fromParams;
+  return typeof activeCandidateId === "string" && activeCandidateId
+    ? activeCandidateId
+    : undefined;
+}
 
 /**
  * Conditional messaging for the live mean-line mode (replaces the B12-era

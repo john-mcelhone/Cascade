@@ -39,6 +39,7 @@ SPEC_SHEET §12 CYC-1 / CYC-2 tolerance: η_th within ±0.1 pt (simple),
 
 from __future__ import annotations
 
+import logging
 import time
 import traceback
 from typing import Any, Dict, List, NoReturn, Optional
@@ -57,7 +58,32 @@ from jobs import (
 from models import JobAcceptedResponse
 
 
+log = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/api/projects/{project_id}/cycle", tags=["cycle"])
+
+
+def _save_last_run_status(project_id: str) -> None:
+    """Persist the ``last_run_status`` badge, tolerating disk failure.
+
+    The terminal worker paths (refusal / non-converged / converged) flush
+    the badge with ``PROJECTS.save``. An ``OSError`` here (disk full,
+    permissions) must never propagate: it would reach ``run_in_worker``'s
+    generic handler and reclassify a design refusal — or a CORRECT
+    converged result — as a class-3 crash. The badge not persisting is far
+    less harmful than misclassifying the run, so log and continue.
+    """
+    # Late import mirrors the worker: tests monkeypatch ``jobs.PROJECTS``.
+    from jobs import PROJECTS
+
+    try:
+        PROJECTS.save(project_id)
+    except Exception as exc:  # noqa: BLE001
+        log.warning(
+            "Could not persist last_run_status for project %s: %s",
+            project_id,
+            exc,
+        )
 
 
 class MissingRequiredComponents(ValueError):
@@ -82,14 +108,18 @@ class MissingRequiredComponents(ValueError):
 
 class GeometryParamsIncomplete(ValueError):
     """Raised by the rotor geometry builders when ``geometry_params`` is
-    ATTACHED to the component but missing required keys.
+    ATTACHED to the component but missing required keys — or carrying
+    non-finite (NaN / ±Inf) values on required keys.
 
     U9 doctrine (ADAPT-045 — supersedes the W-03 graceful-degradation rule
     for the attached-but-invalid case): a partial geometry bag is a
     user-input problem the solver must refuse, never silently paper over
-    with constant-η — refusal-over-guess (SPEC_SHEET §13). Geometry that is
-    entirely ABSENT still falls back to constant η; that fallback is
-    surfaced via the result payload's ``requested_efficiency_modes`` /
+    with constant-η — refusal-over-guess (SPEC_SHEET §13). A NaN/Inf
+    dimension is the same class of problem as a missing one (no
+    trustworthy η can come from it), so it travels the same refusal,
+    named distinctly as non-finite. Geometry that is entirely ABSENT
+    still falls back to constant η; that fallback is surfaced via the
+    result payload's ``requested_efficiency_modes`` /
     ``efficiency_fallbacks``.
 
     The ``code`` attribute mirrors ``RegimeOutOfValidity.code`` so the
@@ -98,12 +128,29 @@ class GeometryParamsIncomplete(ValueError):
 
     CAUSE_CODE = "GEOMETRY_PARAMS_INCOMPLETE"
 
-    def __init__(self, component_kind: str, missing: List[str]) -> None:
+    def __init__(
+        self,
+        component_kind: str,
+        missing: List[str],
+        non_finite: Optional[List[str]] = None,
+    ) -> None:
         self.component_kind = component_kind
         self.missing = list(missing)
+        self.non_finite = list(non_finite or [])
+        problems: List[str] = []
+        if self.missing:
+            problems.append(
+                "missing required field(s): " + ", ".join(self.missing)
+            )
+        if self.non_finite:
+            problems.append(
+                "non-finite (NaN/Inf) value(s) on required field(s): "
+                + ", ".join(self.non_finite)
+            )
         super().__init__(
-            f"{component_kind} geometry_params is attached but missing "
-            "required field(s): " + ", ".join(self.missing) + "."
+            f"{component_kind} geometry_params is attached but has "
+            + "; ".join(problems)
+            + "."
         )
         self.code = self.CAUSE_CODE
         self.suggestions = [
@@ -256,6 +303,35 @@ def _burner_fuel_mass_flow_quantity(bp: Dict[str, Any]):
     return fuel_q
 
 
+def _non_finite_geometry_keys(
+    gp: Dict[str, Any], required: List[str]
+) -> List[str]:
+    """Required keys whose value is present but non-finite (NaN / ±Inf).
+
+    The builders' missing-key check (``gp.get(k) is None``) catches only
+    absent keys; a NaN smuggled in as a raw float (or inside a
+    ``{value, unit}`` dict) would otherwise sail into the geometry
+    constructor and poison the mean-line solve. Non-numeric values return
+    ``False`` here — they are handled by the constructor's own
+    try/except path (unknown-unit 422 or constant-η fallback).
+    """
+    import math
+
+    out: List[str] = []
+    for key in required:
+        val = gp.get(key)
+        if val is None:
+            continue
+        raw = val.get("value") if isinstance(val, dict) else val
+        try:
+            num = float(raw)
+        except (TypeError, ValueError):
+            continue
+        if not math.isfinite(num):
+            out.append(key)
+    return out
+
+
 def _build_compressor_geometry(params: Dict[str, Any]):
     """Build a CentrifugalCompressorGeometry from the component params dict.
 
@@ -319,11 +395,13 @@ def _build_compressor_geometry(params: Dict[str, Any]):
         "tip_clearance",
     ]
     missing = [k for k in required if gp.get(k) is None]
-    if missing:
+    non_finite = _non_finite_geometry_keys(gp, required)
+    if missing or non_finite:
         # U9 / ADAPT-045: an attached-but-incomplete bag refuses design-class
         # (it previously fell back to constant-η with only a log line — see
         # the superseded W-03 doctrine recorded in internal/ADAPTATIONS.md).
-        raise GeometryParamsIncomplete("Compressor", missing)
+        # Non-finite values (NaN/Inf) are the same refusal, named distinctly.
+        raise GeometryParamsIncomplete("Compressor", missing, non_finite=non_finite)
 
     try:
         from cascade.meanline import CentrifugalCompressorGeometry
@@ -416,10 +494,12 @@ def _build_turbine_geometry(params: Dict[str, Any]):
         "tip_clearance",
     ]
     missing = [k for k in required if gp.get(k) is None]
-    if missing:
+    non_finite = _non_finite_geometry_keys(gp, required)
+    if missing or non_finite:
         # U9 / ADAPT-045: attached-but-incomplete refuses design-class —
-        # symmetric with the compressor builder.
-        raise GeometryParamsIncomplete("Turbine", missing)
+        # symmetric with the compressor builder. Non-finite values (NaN/Inf)
+        # are the same refusal, named distinctly.
+        raise GeometryParamsIncomplete("Turbine", missing, non_finite=non_finite)
 
     try:
         from cascade.meanline import RadialTurbineGeometry
@@ -964,16 +1044,26 @@ def _classify_failure(exc: BaseException) -> Dict[str, Any]:
     # required keys. A user-input problem — refuse design-class, naming the
     # missing field(s), rather than silently degrading to constant η.
     if isinstance(exc, GeometryParamsIncomplete):
+        problems: List[str] = []
+        if exc.missing:
+            problems.append(
+                "is missing required field(s): " + ", ".join(exc.missing)
+            )
+        if exc.non_finite:
+            problems.append(
+                "has non-finite (NaN/Inf) value(s) on field(s): "
+                + ", ".join(exc.non_finite)
+            )
         return {
             "kind": "design",
             "title": f"{exc.component_kind} geometry is incomplete",
             "plain_english": (
                 f"Live mean-line mode found a geometry_params bag on the "
-                f"{exc.component_kind} but it is missing required field(s): "
-                + ", ".join(exc.missing)
-                + ". A partial geometry cannot produce a trustworthy η, so "
-                "the solver refuses rather than guessing the missing "
-                "dimensions (refusal-over-guess, SPEC_SHEET §13)."
+                f"{exc.component_kind} but it "
+                + "; and ".join(problems)
+                + ". A partial or non-finite geometry cannot produce a "
+                "trustworthy η, so the solver refuses rather than guessing "
+                "the dimensions (refusal-over-guess, SPEC_SHEET §13)."
             ),
             "suggestions": exc.suggestions,
             "details": msg,
@@ -1213,7 +1303,7 @@ def _cycle_worker(project_id: str):
             # gets no further progress events after its final one.
             report_progress(job, 1.0, failure["title"])
             project["last_run_status"] = "failed"
-            PROJECTS.save(project_id)
+            _save_last_run_status(project_id)
         raise JobRefusal(
             envelope=_failure_result(failure),
             message=_refusal_message(failure, exc),
@@ -1272,7 +1362,7 @@ def _cycle_worker(project_id: str):
                 "details": f"residual = {result.residual_norm:.3e} after {result.outer_iterations} iterations",
             }
             project["last_run_status"] = "non_converged"
-            PROJECTS.save(project_id)
+            _save_last_run_status(project_id)
             return _failure_result(failure)
         report_progress(job, 0.9, "Solver converged. Packaging result.")
         time.sleep(0.02)
@@ -1435,7 +1525,7 @@ def _cycle_worker(project_id: str):
         # Converged run: the non-converged branch returned above, so this is
         # always "done". Save so the badge survives a restart.
         project["last_run_status"] = "done"
-        PROJECTS.save(project_id)
+        _save_last_run_status(project_id)
         return out
 
     return worker

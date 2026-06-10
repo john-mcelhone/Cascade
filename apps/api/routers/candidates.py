@@ -10,6 +10,7 @@ placeholder.
 from __future__ import annotations
 
 import io
+import math
 import struct
 from typing import Any, Dict, List, Optional
 
@@ -182,7 +183,24 @@ def _merged_cc_geometry(cand: Dict[str, Any]):
         v = getattr(geom, f.name)
         if v is None:
             continue
-        geometry_params[f.name] = float(v)
+        fv = float(v)
+        # A degenerate scale can produce NaN/inf; refuse rather than
+        # silently writing a non-finite value into the TOML bag (the
+        # cycle builder would only trip on it much later, far from the
+        # cause).
+        if not math.isfinite(fv):
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "error_code": "CANDIDATE_GEOMETRY_INVALID",
+                    "message": (
+                        "The candidate's merged geometry has a non-finite "
+                        f"value for {f.name!r} ({fv!r}); refusing to write "
+                        "it to the project."
+                    ),
+                },
+            )
+        geometry_params[f.name] = fv
     return geom, op, geometry_params
 
 
@@ -204,6 +222,45 @@ def _design_point_solve(geom, op):  # type: ignore[no-untyped-def]
     )
     solver = CentrifugalCompressorMeanline()
     return solver.solve(inlet, Q(op["rpm"], "rpm"), geom, AungierCentrifugal())
+
+
+def _consistent_turbine_pr(
+    components: List[Dict[str, Any]], pr_c: float
+) -> float:
+    """Turbine PR consistent with ``pr_c`` through the pressure-drop chain.
+
+    Same identity as ``cascade.validation.cases.capstone_c30
+    .turbine_pressure_ratio``: total pressure starts at 1 atm at the inlet
+    and ends at 1 atm at the exhaust, so the turbine expands across
+    whatever the compressor built minus the chain of fractional drops:
+
+        p_burner_out_atm  = (1 - dp_inlet) * PR_c
+                              * (1 - dp_recup_cold) * (1 - dp_burner)
+        p_turbine_out_atm = 1 / (1 - dp_recup_hot)
+        PR_t = p_burner_out_atm / p_turbine_out_atm
+
+    Components absent from the canvas (e.g. a non-recuperated cycle)
+    contribute a zero drop. Without this rebalance an aligned (lower)
+    compressor PR leaves the seed turbine over-expanding and the next
+    solve deterministically refuses OPEN_CYCLE_SUB_ATMOSPHERIC.
+    """
+    by_kind = {c.get("kind"): (c.get("params") or {}) for c in components}
+    pdrop_inlet = float(
+        by_kind.get("ConstantPressureLoss", {}).get(
+            "pressure_drop_fraction", 0.0
+        )
+    )
+    recup = by_kind.get("Recuperator", {})
+    pdrop_cold = float(recup.get("cold_pressure_drop_fraction", 0.0))
+    pdrop_hot = float(recup.get("hot_pressure_drop_fraction", 0.0))
+    pdrop_burner = float(
+        by_kind.get("Burner", {}).get("pressure_drop_fraction", 0.0)
+    )
+    p_burner_out_atm = (
+        (1.0 - pdrop_inlet) * pr_c * (1.0 - pdrop_cold) * (1.0 - pdrop_burner)
+    )
+    p_turbine_out_atm = 1.0 / (1.0 - pdrop_hot)
+    return p_burner_out_atm / p_turbine_out_atm
 
 
 @router.get(
@@ -244,14 +301,22 @@ def send_candidate_to_cycle(
 ) -> SendToCycleResponse:
     """Write the candidate's merged geometry onto the project's Compressor.
 
-    Replaces ``params.geometry_params`` WHOLESALE and sets
-    ``params.meanline_rpm_rpm`` from the candidate-scaled rpm, then saves
+    Replaces ``params.geometry_params`` WHOLESALE, sets
+    ``params.meanline_rpm_rpm`` from the candidate-scaled rpm and records
+    provenance under ``params.geometry_source_candidate_id``, then saves
     the project to the TOML store so the handoff survives a restart.
 
     With ``align_operating_point`` (default on) the endpoint also sets the
     compressor's ``pressure_ratio`` and the project boundary-condition mass
-    flow to the candidate's design point, mirroring the Inlet component's
-    params so the canvas chips stay truthful.
+    flow to the candidate's design point (mirroring the Inlet component's
+    params so the canvas chips stay truthful), and rebalances the Turbine
+    component's ``pressure_ratio`` through the project's pressure-drop
+    chain so the cycle stays solvable (see :func:`_consistent_turbine_pr`).
+
+    All validation — candidate scope/status, geometry merge, alignment
+    solve — runs BEFORE any mutation: a 422 leaves the cached project
+    byte-identical, so a later unrelated save can never persist rejected
+    geometry.
     """
     cand = _candidate_scoped_or_404(candidate_id, req.project_id)
     project = PROJECTS.get(req.project_id)
@@ -304,15 +369,14 @@ def send_candidate_to_cycle(
         )
 
     geom, op, geometry_params = _merged_cc_geometry(cand)
-    params = compressor.setdefault("params", {})
-    # REPLACE, never merge — a stale extra key from an earlier handoff (or
-    # hand edit) must not survive into the new bag.
-    params["geometry_params"] = geometry_params
-    params["meanline_rpm_rpm"] = float(op["rpm"])
 
+    # Run ALL remaining validation before touching the cached project: a
+    # refused alignment solve must not leave rejected geometry attached in
+    # memory, where any later unrelated save would persist it.
     aligned = False
     pressure_ratio: Optional[float] = None
     mass_flow: Optional[float] = None
+    turbine_pressure_ratio: Optional[float] = None
     if req.align_operating_point:
         try:
             result = _design_point_solve(geom, op)
@@ -332,18 +396,43 @@ def send_candidate_to_cycle(
             ) from exc
         pressure_ratio = float(result.pressure_ratio_tt)
         mass_flow = float(op["mass_flow_kg_per_s"])
+
+    # Validation passed — mutate the cached project, then save through.
+    params = compressor.setdefault("params", {})
+    # REPLACE, never merge — a stale extra key from an earlier handoff (or
+    # hand edit) must not survive into the new bag.
+    params["geometry_params"] = geometry_params
+    params["meanline_rpm_rpm"] = float(op["rpm"])
+    # Provenance: the UI chip attributes the bag to its source candidate.
+    params["geometry_source_candidate_id"] = str(candidate_id)
+
+    if req.align_operating_point:
         params["pressure_ratio"] = pressure_ratio
         bc = project.setdefault("boundary_conditions", {})
         bc["mass_flow"] = {"value": mass_flow, "unit": "kg/s"}
         # Mirror onto the Inlet component (the canvas node renders its own
         # params, and component PATCH mirrors the other way — keep the two
         # representations consistent).
-        for comp in project.get("components", []) or []:
+        components = project.get("components", []) or []
+        for comp in components:
             if comp.get("kind") == "Inlet":
                 comp.setdefault("params", {})["mass_flow"] = {
                     "value": mass_flow,
                     "unit": "kg/s",
                 }
+        # Rebalance the turbine PR through the pressure-drop chain so the
+        # aligned compressor PR doesn't leave the seed turbine
+        # over-expanding (OPEN_CYCLE_SUB_ATMOSPHERIC on the next solve).
+        turbine = next(
+            (c for c in components if c.get("kind") == "Turbine"), None
+        )
+        if turbine is not None:
+            turbine_pressure_ratio = _consistent_turbine_pr(
+                components, pressure_ratio
+            )
+            turbine.setdefault("params", {})["pressure_ratio"] = (
+                turbine_pressure_ratio
+            )
         aligned = True
 
     # Save-through: component-level cache mutation does not flush on its
@@ -358,6 +447,7 @@ def send_candidate_to_cycle(
         aligned=aligned,
         pressure_ratio=pressure_ratio,
         mass_flow_kg_per_s=mass_flow,
+        turbine_pressure_ratio=turbine_pressure_ratio,
     )
 
 

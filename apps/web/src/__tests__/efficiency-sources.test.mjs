@@ -13,8 +13,15 @@
  *    src/components/cycle/result-panel.tsx (the "Efficiency sources"
  *    block's state mapping and the fallback-warning predicate);
  *  - the FastAPI error-detail message extraction in `fetchJson`
- *    (src/lib/api/client.ts) — the 422 air-standard + live-meanline
- *    conflict must surface `detail.message`, never "[object Object]".
+ *    (src/lib/api/client.ts) AND its twin in `flowPathJson`
+ *    (src/lib/api/flowpath.ts) — both must surface `detail.message` (or a
+ *    JSON-stringified dict) for structured details, never
+ *    "[object Object]";
+ *  - `geometrySourceCandidateId` in
+ *    src/components/cycle/properties-panel.tsx — the geometry chip's
+ *    provenance: per-component `geometry_source_candidate_id` (written by
+ *    send-to-cycle) wins over the project-level pin, with the pin as the
+ *    fallback for old projects.
  */
 
 import assert from "node:assert/strict";
@@ -93,7 +100,21 @@ function showEfficiencySources(result) {
 }
 
 // ---------------------------------------------------------------------------
-// Mirror of fetchJson's FastAPI error message extraction (client.ts)
+// Mirror of geometrySourceCandidateId (properties-panel.tsx)
+// ---------------------------------------------------------------------------
+
+function geometrySourceCandidateId(params, activeCandidateId) {
+  const fromParams = params?.geometry_source_candidate_id;
+  if (typeof fromParams === "string" && fromParams) return fromParams;
+  return typeof activeCandidateId === "string" && activeCandidateId
+    ? activeCandidateId
+    : undefined;
+}
+
+// ---------------------------------------------------------------------------
+// Mirror of fetchJson's (client.ts) / flowPathJson's (flowpath.ts)
+// FastAPI error message extraction — the two implementations are
+// intentionally identical; this single mirror guards both.
 // ---------------------------------------------------------------------------
 
 function extractErrorMessage(detail, status) {
@@ -287,7 +308,64 @@ test("block hidden when attribution fields are absent (legacy result)", () => {
 });
 
 // ---------------------------------------------------------------------------
-// 422 error-detail message extraction (run-button toast path)
+// Geometry chip provenance (properties-panel.tsx)
+// ---------------------------------------------------------------------------
+
+test("chip prefers the per-component geometry_source_candidate_id", () => {
+  assert.equal(
+    geometrySourceCandidateId(
+      {
+        geometry_params: { blade_count: 12 },
+        geometry_source_candidate_id: "cand-sent-1234",
+      },
+      "cand-pinned-5678",
+    ),
+    "cand-sent-1234",
+  );
+});
+
+test("chip falls back to the pin when the params key is absent (old projects)", () => {
+  assert.equal(
+    geometrySourceCandidateId(
+      { geometry_params: { blade_count: 12 } },
+      "cand-pinned-5678",
+    ),
+    "cand-pinned-5678",
+  );
+});
+
+test("chip provenance is undefined with neither source nor pin", () => {
+  assert.equal(
+    geometrySourceCandidateId({ geometry_params: {} }, undefined),
+    undefined,
+  );
+  assert.equal(geometrySourceCandidateId(undefined, undefined), undefined);
+});
+
+test("non-string / empty provenance values are ignored, not rendered", () => {
+  // A malformed params value must not shadow a valid pin…
+  assert.equal(
+    geometrySourceCandidateId(
+      { geometry_source_candidate_id: 42 },
+      "cand-pinned-5678",
+    ),
+    "cand-pinned-5678",
+  );
+  assert.equal(
+    geometrySourceCandidateId(
+      { geometry_source_candidate_id: "" },
+      "cand-pinned-5678",
+    ),
+    "cand-pinned-5678",
+  );
+  // …and a malformed pin yields no chip suffix at all.
+  assert.equal(geometrySourceCandidateId({}, 42), undefined);
+  assert.equal(geometrySourceCandidateId({}, ""), undefined);
+});
+
+// ---------------------------------------------------------------------------
+// 422 error-detail message extraction (run-button toast path + flowpath
+// candidate-handoff errors — flowPathJson shares this exact extraction)
 // ---------------------------------------------------------------------------
 
 test("structured 422 detail surfaces detail.message, not [object Object]", () => {
@@ -315,6 +393,10 @@ test("structured detail without message falls back to JSON, not [object Object]"
   const msg = extractErrorMessage({ detail: { error_code: "X" } }, 422);
   assert.ok(!msg.includes("[object Object]"), msg);
   assert.equal(msg, '{"error_code":"X"}');
+});
+
+test("whole-body string (text fallback / JSON string body) passes through", () => {
+  assert.equal(extractErrorMessage("upstream proxy error", 502), "upstream proxy error");
 });
 
 test("empty body falls back to the HTTP status", () => {

@@ -160,7 +160,9 @@ export default function CandidateDetailPage({ params }: PageProps) {
   // Arriving by URL sets the picked candidate so back-navigation to the
   // flow-path scatter highlights this dot.
   useEffect(() => {
-    if (candidate) setPicked(candidateId);
+    // Identity gate: a cached/stale candidate object from a previous route
+    // must not mark the *current* URL's id as picked.
+    if (candidate && candidate.id === candidateId) setPicked(candidateId);
   }, [candidate, candidateId, setPicked]);
 
   // Accessibility: focus moves to the page heading on navigation.
@@ -224,7 +226,18 @@ export default function CandidateDetailPage({ params }: PageProps) {
   });
 
   const detachMutation = useMutation({
-    mutationFn: () => detachComponentGeometry(id, compressor!.id),
+    mutationFn: async () => {
+      // Capture at call time: the components query may have refetched (or
+      // errored) since the button rendered. A missing compressor surfaces
+      // as a descriptive mutation error toast, not a TypeError.
+      const compressorId = compressor?.id;
+      if (!compressorId) {
+        throw new Error(
+          "No cycle Compressor component found — nothing to detach geometry from.",
+        );
+      }
+      return detachComponentGeometry(id, compressorId);
+    },
     onSuccess: () => {
       invalidateGeometryConsumers();
       toast.success(
@@ -461,6 +474,9 @@ export default function CandidateDetailPage({ params }: PageProps) {
             </Button>
             <Button
               onClick={() => {
+                // Double-submit guard: a second click before the dialog
+                // closes must not fire a second send.
+                if (sendMutation.isPending) return;
                 setConfirmOpen(false);
                 sendMutation.mutate();
               }}

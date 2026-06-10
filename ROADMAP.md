@@ -29,7 +29,7 @@ Measured against the credibility table stakes in
 | Performance-map conventions | Shipped — corrected-flow maps with explicit surge/choke/non-convergence codes |
 | Refusal over extrapolation | Shipped — `SPEC_SHEET.md` §13 doctrine, enforced in solvers and API |
 | API 617/684 rotor outputs | Partial — separation margin and amplification factor per API 684 ship; full report alignment is roadmap work |
-| STEP/IGES + TurboGrid handoff | Partial — TurboGrid/CGNS/point-cloud export ship; STEP/IGES requires the optional CAD dependency (KG-G-09) |
+| STEP/IGES + TurboGrid handoff | Partial — TurboGrid/CGNS/point-cloud export ship; STEP/IGES requires the optional CAD dependency (KG-G-08) |
 | Axial machines | Not shipped (KG-AXT-01) |
 | Secondary-air / thermal-fluid networks | Not shipped (KG-TFN-01) |
 

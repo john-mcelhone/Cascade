@@ -27,8 +27,10 @@ interface ResultPanelProps {
  * actually used, the mode actually used, the mode the user requested
  * (pre-fallback), and an explicit fallback flag. The block below renders a
  * row per rotor and, when live mean-line was requested but the solve fell
- * back to constant η (no geometry attached), a warning chip — icon + text,
- * never colour alone.
+ * back to constant η, a warning chip — icon + text, never colour alone.
+ * The chip copy stays neutral about *why* the fallback happened: the
+ * payload proves only that geometry wasn't used, not whether a geometry
+ * bag was attached (a constructor failure also falls back, ADAPT-045).
  *
  * Mirrored (plain JS) by src/__tests__/efficiency-sources.test.mjs.
  * ------------------------------------------------------------------------- */
@@ -290,7 +292,7 @@ export function ResultPanel({ nodes }: ResultPanelProps) {
                     {row.fellBack && (
                       <span className="inline-flex items-center gap-1 rounded-sm border border-semantic-warning-border bg-semantic-warning-surface/40 px-1.5 py-0.5 text-[11px] text-semantic-warning-text">
                         <AlertTriangle className="h-3 w-3" aria-hidden="true" />
-                        Fell back to isentropic — no geometry attached
+                        Fell back to isentropic — geometry not used
                       </span>
                     )}
                   </div>

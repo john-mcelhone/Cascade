@@ -18,7 +18,7 @@ Cascade is built around the idea that turbomachinery design should be:
 - Performance map generator with explicit surge/choke/non-convergence codes.
 - Rotor dynamics: linear Timoshenko beam-FEM, gyroscopic coupling, critical-speed map, unbalance response (Bode + amplification factor + separation margin), Campbell, stability.
 - Plain-journal bearing solver (Reynolds + Christopherson PSOR). Tilt-pad, thrust, and foil bearings accept tabulated stiffness/damping input (native solvers: see `KNOWN_GAPS.md` KG-007/008/009).
-- CLI (`cascade demo`, `validate`, `sweep`, `export`, plugin management). The Python package doubles as the scripting interface; full SDK/CLI parity with the web UI is tracked as a known gap (SPEC-15).
+- CLI (`cascade demo`, `validate`, `sweep`, `export`, plugin management). The Python package doubles as the scripting interface; full SDK/CLI parity with the web UI is not yet reached — the spec-parity gate (`make spec-parity`) tracks the uncovered surface.
 - Reproducible project format: `.cascade` directory of TOML files with units; collaboration model in v1.0 is asynchronous (branch + diff + pull request).
 
 ## What's deferred to v1.1

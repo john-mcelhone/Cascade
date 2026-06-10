@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import math
 import sys
 import threading
 import time
@@ -342,19 +343,43 @@ def cancel_job(job_id: str) -> bool:
     return True
 
 
+def sanitize_for_json(value: Any) -> Any:
+    """Recursively replace non-finite floats (NaN / ±Inf) with ``None``.
+
+    SSE event payloads are serialized with ``json.dumps``, whose default
+    emits bare ``NaN`` / ``Infinity`` literals — invalid JSON that a
+    browser's ``JSON.parse`` rejects. A non-finite ``residual_norm`` in a
+    failure envelope would make the client swallow the final event and
+    hang the Run button, so we sanitize at the publish boundary. (The REST
+    surface is unaffected: pydantic already serializes non-finite floats
+    as ``null``.)
+    """
+
+    if isinstance(value, float):
+        return value if math.isfinite(value) else None
+    if isinstance(value, dict):
+        return {k: sanitize_for_json(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [sanitize_for_json(v) for v in value]
+    return value
+
+
 def publish_event(job_id: str, event: Dict[str, Any], final: bool = False) -> None:
     """Push an event onto the job's SSE queue, thread-safe.
 
     Workers run on a background thread; the asyncio queue lives on the
     server's event loop. We schedule via call_soon_threadsafe so workers
     don't have to touch the loop directly.
+
+    Payloads are sanitized here (see :func:`sanitize_for_json`) so every
+    event reaching the SSE serializer is strict-JSON-safe.
     """
 
     loop = _JOB_LOOPS.get(job_id)
     queue = _JOB_QUEUES.get(job_id)
     if loop is None or queue is None:
         return
-    payload = dict(event)
+    payload = sanitize_for_json(dict(event))
     payload["job_id"] = job_id
     if final:
         payload["final"] = True
@@ -385,14 +410,18 @@ async def stream_events(job_id: str, heartbeat_interval: float = 15.0):
         # event so the client can close.
         job = get_job(job_id)
         if job is not None:
-            yield {
-                "job_id": job_id,
-                "status": job.status,
-                "progress": job.progress,
-                "message": job.message,
-                "result": job.result,
-                "final": True,
-            }
+            # Sanitized here because this path bypasses publish_event —
+            # job.result may carry a non-finite residual_norm.
+            yield sanitize_for_json(
+                {
+                    "job_id": job_id,
+                    "status": job.status,
+                    "progress": job.progress,
+                    "message": job.message,
+                    "result": job.result,
+                    "final": True,
+                }
+            )
         return
 
     while True:
@@ -454,6 +483,11 @@ def run_in_worker(
             )
             return
         except Exception as exc:  # noqa: BLE001
+            if job.cancelled:
+                # cancel_job already published the final "cancelled" event;
+                # a late crash must not overwrite the status or publish a
+                # second final event (mirrors the refusal/success guards).
+                return
             # Class 3: unexpected crash — error set, no failure envelope.
             job.status = "failed"
             job.error = f"{type(exc).__name__}: {exc}"

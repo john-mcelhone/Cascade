@@ -344,6 +344,132 @@ def test_cancel_then_refuse_keeps_cancelled_status(monkeypatch):
     assert finals[0]["status"] == "cancelled"
 
 
+def test_cancel_then_crash_keeps_cancelled_status(monkeypatch):
+    """A job cancelled before an unexpected crash keeps status `cancelled`
+    and publishes no second final event (class-3 mirror of the
+    cancel-then-refuse race above)."""
+    jobs.reset_for_tests()
+    events: List[Tuple[Dict[str, Any], bool]] = []
+
+    def record_event(job_id: str, event: Dict[str, Any], final: bool = False) -> None:
+        events.append((dict(event), final))
+
+    monkeypatch.setattr(jobs, "publish_event", record_event)
+    monkeypatch.setattr(jobs, "_EXECUTOR", _InlineExecutor())
+
+    job = jobs.register_job("any-project", "cycle")
+
+    def worker(j: jobs.Job) -> Dict[str, Any]:
+        # User cancels mid-run, then the worker crashes unexpectedly.
+        jobs.cancel_job(j.id)
+        raise RuntimeError("late crash after cancel (test)")
+
+    jobs.run_in_worker(job, worker)
+
+    assert job.status == "cancelled"
+    # The crash must not overwrite the cancelled terminal state.
+    assert job.error is None
+    assert job.result is None
+    assert job.message == "Cancelled by user."
+    finals = [ev for ev, final in events if final]
+    assert len(finals) == 1, finals
+    assert finals[0]["status"] == "cancelled"
+
+
+# ---------------------------------------------------------------------------
+# Terminal-path badge saves must never reclassify the run
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_disk_save_failure_does_not_reclassify_terminal_paths(
+    app, monkeypatch
+):
+    """An OSError from the terminal badge save (disk full / permissions)
+    must not morph a class-1 design refusal — or a CORRECT converged
+    result — into a class-3 crash. The badge not persisting is far less
+    harmful than misclassifying the run."""
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        await client.get("/api/health")
+
+        # Break the disk-save seam AFTER seeding so only the terminal
+        # worker saves hit it.
+        def broken_disk_save(project):  # noqa: ANN001
+            raise OSError(28, "No space left on device (injected by test)")
+
+        monkeypatch.setattr(jobs, "_disk_save_project", broken_disk_save)
+
+        # Topology refusal stays class 1: failed, error=None, envelope on.
+        refused = await _solve(client, "aero-demonstrator")
+        assert refused["status"] == "failed"
+        assert refused["error"] is None, refused
+        assert refused["result"]["failure"]["kind"] == "design"
+
+        # Converged solve stays class "done" with its full result.
+        converged = await _solve(client, "microturbine-30kw")
+        assert converged["status"] == "done", converged
+        assert converged["error"] is None
+        assert converged["result"]["converged"] is True
+
+
+# ---------------------------------------------------------------------------
+# SSE payloads are strict JSON (no NaN/Infinity literals)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_sse_event_with_non_finite_floats_serializes_to_strict_json():
+    """A non-finite float in a published event (e.g. the failure envelope's
+    ``residual_norm = NaN``) must not leak a bare NaN/Infinity literal into
+    the SSE data: that is invalid JSON, the browser's JSON.parse rejects
+    it, and the client would swallow the final event and hang the Run
+    button. The publish seam sanitizes non-finite floats to null."""
+    import json
+
+    jobs.reset_for_tests()
+    job = jobs.register_job(
+        "any-project", "cycle", loop=asyncio.get_running_loop()
+    )
+
+    jobs.publish_event(
+        job.id,
+        {
+            "status": "failed",
+            "message": "refused",
+            "result": {
+                "residual_norm": float("nan"),
+                "nested": {"pos": float("inf"), "neg": float("-inf")},
+                "listed": [1.0, float("nan")],
+                "finite": 1.5,
+            },
+        },
+        final=True,
+    )
+
+    events = []
+    async for event in jobs.stream_events(job.id, heartbeat_interval=1.0):
+        events.append(event)
+    assert len(events) == 1
+
+    def _reject_constant(name: str) -> None:
+        raise AssertionError(
+            f"non-finite literal {name!r} leaked into the SSE JSON payload"
+        )
+
+    # Same serialization the SSE endpoint applies (main.py event_generator),
+    # round-tripped strictly: parse_constant raises on NaN/Infinity.
+    data = json.dumps(events[0])
+    parsed = json.loads(data, parse_constant=_reject_constant)
+    assert parsed["final"] is True
+    result = parsed["result"]
+    assert result["residual_norm"] is None
+    assert result["nested"]["pos"] is None
+    assert result["nested"]["neg"] is None
+    assert result["listed"] == [1.0, None]
+    assert result["finite"] == 1.5
+
+
 # ---------------------------------------------------------------------------
 # Stable cause codes on the JobRefusal exception
 # ---------------------------------------------------------------------------

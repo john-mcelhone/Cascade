@@ -26,14 +26,13 @@ surface wherever possible (explore → candidate handoff → solve):
 - Recuperated + live mean-line (the documented hard case): terminates
   within the iteration cap — converges or refuses, never hangs.
 
-Operating-point note: U8's alignment writes the compressor PR and the
-boundary-condition mass flow, but NOT the turbine PR. On the C30 seed the
-stored turbine PR is derived from the seed PR's pressure-drop chain, so an
-aligned (lower) compressor PR leaves the turbine over-expanding →
-``OPEN_CYCLE_SUB_ATMOSPHERIC``. The tests therefore rebalance the turbine
-PR from the project's own pressure-drop chain (the same identity
-``capstone_c30.turbine_pressure_ratio`` documents, and the same fix the
-refusal envelope suggests) before solving.
+Operating-point note: U8's alignment writes the compressor PR, the
+boundary-condition mass flow AND a consistent turbine PR rebalanced
+through the project's own pressure-drop chain (the identity
+``capstone_c30.turbine_pressure_ratio`` documents). The tests exercise
+the as-shipped flow — send aligned → set live_meanline → solve — with no
+manual rebalance, and pin the endpoint's turbine-PR write against the
+first-principles oracle ``_consistent_turbine_pr`` below.
 """
 
 from __future__ import annotations
@@ -163,9 +162,13 @@ def _consistent_turbine_pr(components: Any, pr_c: float) -> float:
 
 
 async def _aligned_handoff(client: httpx.AsyncClient) -> Dict[str, Any]:
-    """Explore → best candidate → send-to-cycle WITH alignment, then
-    rebalance the turbine PR from the pressure-drop chain (see module
-    docstring). Returns the send-to-cycle response body."""
+    """Explore → best candidate → send-to-cycle WITH alignment.
+
+    The as-shipped flow: the ENDPOINT writes the consistent turbine PR —
+    no manual rebalance here. The helper pins that write against the
+    first-principles oracle above before returning the send-to-cycle
+    response body.
+    """
     job = await _run_explore(client, MICRO)
     best_id = job["result"]["best_id"]
     assert best_id is not None
@@ -181,8 +184,11 @@ async def _aligned_handoff(client: httpx.AsyncClient) -> Dict[str, Any]:
         await client.get(f"/api/projects/{MICRO}/components")
     ).json()["components"]
     turbine = next(c for c in components if c["kind"] == "Turbine")
-    pr_t = _consistent_turbine_pr(components, float(body["pressure_ratio"]))
-    await _patch_params(client, MICRO, turbine["id"], {"pressure_ratio": pr_t})
+    expected_pr_t = _consistent_turbine_pr(
+        components, float(body["pressure_ratio"])
+    )
+    assert body["turbine_pressure_ratio"] == pytest.approx(expected_pr_t)
+    assert turbine["params"]["pressure_ratio"] == pytest.approx(expected_pr_t)
     return body
 
 

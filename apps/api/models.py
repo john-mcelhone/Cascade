@@ -276,10 +276,22 @@ class SendToCycleRequest(BaseModel):
     # Default-on alignment: explore candidates are built at a conservative
     # reference tip speed (PR ≈ 1.8) while the seed cycles impose higher
     # pressure ratios — geometry+rpm alone would run the co-sim deep
-    # off-design. Alignment sets the cycle compressor's pressure_ratio and
-    # the project boundary-condition mass flow to the candidate's design
-    # point. Without it a live-meanline refusal is the expected outcome.
-    align_operating_point: bool = True
+    # off-design.
+    align_operating_point: bool = Field(
+        default=True,
+        description=(
+            "Align the cycle's operating point to the candidate's design "
+            "point (default on). When true, the handoff also writes the "
+            "compressor pressure_ratio, the project boundary-condition "
+            "mass flow (mirrored onto the Inlet component), and a "
+            "consistent Turbine pressure_ratio derived from the project's "
+            "inlet/recuperator/burner/exhaust pressure-drop chain. Without "
+            "alignment only geometry + rpm are written and a live-meanline "
+            "refusal is the expected outcome on the default seeds (the "
+            "seed operating point runs the candidate geometry deep "
+            "off-design)."
+        ),
+    )
 
 
 class SendToCycleResponse(BaseModel):
@@ -292,6 +304,10 @@ class SendToCycleResponse(BaseModel):
     # Present only when aligned=True.
     pressure_ratio: Optional[float] = None
     mass_flow_kg_per_s: Optional[float] = None
+    # The consistent Turbine pressure_ratio written alongside the aligned
+    # compressor PR (derived through the project's pressure-drop chain).
+    # None when not aligned or when the canvas has no Turbine component.
+    turbine_pressure_ratio: Optional[float] = None
 
 
 class PinCandidateRequest(BaseModel):
