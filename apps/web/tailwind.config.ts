@@ -135,7 +135,7 @@ const config: Config = {
         // Display serif — marketing / onboarding headlines only.
         display: [
           "var(--font-display)",
-          "Instrument Serif",
+          "Fraunces",
           "Georgia",
           "Times New Roman",
           "serif",

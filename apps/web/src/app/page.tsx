@@ -83,7 +83,7 @@ export default function Home() {
                 </div>
 
                 <h1
-                  className="animate-fade-in-up max-w-2xl font-display text-[44px] font-normal leading-[1.04] tracking-[-0.01em] sm:text-[60px]"
+                  className="animate-fade-in-up max-w-2xl font-display text-[40px] font-medium leading-[1.06] tracking-[-0.015em] sm:text-[52px]"
                   style={{ animationDelay: "60ms" }}
                 >
                   Turbomachinery design,
@@ -147,7 +147,7 @@ export default function Home() {
         <section className="mx-auto w-full max-w-6xl px-5 py-14">
           <div className="mb-6">
             <p className="micro-label mb-2">Two ways in</p>
-            <h2 className="font-display text-[34px] font-normal leading-tight">
+            <h2 className="font-display text-[30px] font-medium leading-tight tracking-[-0.01em]">
               Cascade meets you where you are —{" "}
               <span className="italic">and grows as you do.</span>
             </h2>
@@ -200,7 +200,7 @@ export default function Home() {
         <section className="mx-auto w-full max-w-6xl px-5 py-14">
           <div className="mb-6">
             <p className="micro-label mb-2">Pipeline</p>
-            <h2 className="font-display text-[34px] font-normal leading-tight">
+            <h2 className="font-display text-[30px] font-medium leading-tight tracking-[-0.01em]">
               The whole hero workflow,{" "}
               <span className="italic">in one browser tab.</span>
             </h2>

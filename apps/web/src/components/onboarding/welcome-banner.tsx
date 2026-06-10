@@ -37,7 +37,7 @@ export function WelcomeBanner() {
       </div>
 
       <div className="p-4">
-        <h2 className="font-display text-[26px] font-normal leading-tight text-text">
+        <h2 className="font-display text-[24px] font-medium leading-tight tracking-[-0.01em] text-text">
           Let&apos;s get you to <span className="italic">your first result.</span>
         </h2>
         <p className="mt-1 max-w-2xl text-sm leading-relaxed text-text-muted">
