@@ -83,12 +83,12 @@ export default function Home() {
                 </div>
 
                 <h1
-                  className="animate-fade-in-up max-w-2xl text-2xl font-semibold leading-[1.06] tracking-tight sm:text-3xl"
+                  className="animate-fade-in-up max-w-2xl font-display text-[44px] font-normal leading-[1.04] tracking-[-0.01em] sm:text-[60px]"
                   style={{ animationDelay: "60ms" }}
                 >
                   Turbomachinery design,
                   <br className="hidden sm:block" />{" "}
-                  <span className="text-brand">in the open.</span>
+                  <span className="italic text-brand">in the open.</span>
                 </h1>
 
                 <p
@@ -147,8 +147,9 @@ export default function Home() {
         <section className="mx-auto w-full max-w-6xl px-5 py-14">
           <div className="mb-6">
             <p className="micro-label mb-2">Two ways in</p>
-            <h2 className="text-xl font-semibold tracking-tight">
-              Cascade meets you where you are — and grows as you do.
+            <h2 className="font-display text-[34px] font-normal leading-tight">
+              Cascade meets you where you are —{" "}
+              <span className="italic">and grows as you do.</span>
             </h2>
           </div>
           <div className="grid gap-4 md:grid-cols-2">
@@ -199,8 +200,9 @@ export default function Home() {
         <section className="mx-auto w-full max-w-6xl px-5 py-14">
           <div className="mb-6">
             <p className="micro-label mb-2">Pipeline</p>
-            <h2 className="text-xl font-semibold tracking-tight">
-              The whole hero workflow, in one browser tab.
+            <h2 className="font-display text-[34px] font-normal leading-tight">
+              The whole hero workflow,{" "}
+              <span className="italic">in one browser tab.</span>
             </h2>
             <p className="mt-1 text-sm text-text-muted">
               The path legacy desktop tools take a week to wire up.

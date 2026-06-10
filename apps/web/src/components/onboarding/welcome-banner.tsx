@@ -37,8 +37,8 @@ export function WelcomeBanner() {
       </div>
 
       <div className="p-4">
-        <h2 className="text-lg font-semibold tracking-tight text-text">
-          Let&apos;s get you to your first result.
+        <h2 className="font-display text-[26px] font-normal leading-tight text-text">
+          Let&apos;s get you to <span className="italic">your first result.</span>
         </h2>
         <p className="mt-1 max-w-2xl text-sm leading-relaxed text-text-muted">
           Cascade takes you from a thermodynamic cycle to a validated rotor in

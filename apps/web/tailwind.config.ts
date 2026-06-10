@@ -132,6 +132,14 @@ const config: Config = {
           "Consolas",
           "monospace",
         ],
+        // Display serif — marketing / onboarding headlines only.
+        display: [
+          "var(--font-display)",
+          "Instrument Serif",
+          "Georgia",
+          "Times New Roman",
+          "serif",
+        ],
       },
 
       fontSize: {
