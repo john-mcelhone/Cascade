@@ -61,66 +61,79 @@ export default function Home() {
             className="bg-blueprint pointer-events-none absolute inset-0 -z-10 [mask-image:radial-gradient(ellipse_at_top_left,black,transparent_75%)]"
           />
 
-          <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-5 py-16 sm:py-24">
-            <div className="animate-fade-in-up inline-flex items-center gap-3">
-              <span className="inline-flex items-center gap-2 rounded-sm border border-border-subtle bg-surface px-2.5 py-1">
-                <span className="led led-pulse bg-semantic-success" aria-hidden />
-                <span className="micro-label !text-text-subtle">
-                  v0.1.0 — Validation public
-                </span>
-              </span>
-              <Link
-                href="/docs/validation"
-                className="micro-label hidden underline-offset-4 hover:text-text hover:underline sm:block"
-              >
-                Read the report
-              </Link>
-            </div>
+          <div className="mx-auto w-full max-w-6xl px-5 py-14 sm:py-20">
+            <div className="grid items-center gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,28rem)]">
+              <div className="flex flex-col gap-6">
+                <div className="animate-fade-in-up inline-flex items-center gap-3">
+                  <span className="inline-flex items-center gap-2 rounded-sm border border-border-subtle bg-surface px-2.5 py-1">
+                    <span
+                      className="led led-pulse bg-semantic-success"
+                      aria-hidden
+                    />
+                    <span className="micro-label !text-text-subtle">
+                      v0.1.0 — Validation public
+                    </span>
+                  </span>
+                  <Link
+                    href="/docs/validation"
+                    className="micro-label hidden underline-offset-4 hover:text-text hover:underline sm:block"
+                  >
+                    Read the report
+                  </Link>
+                </div>
 
-            <h1
-              className="animate-fade-in-up max-w-4xl text-3xl font-semibold leading-[1.04] tracking-tight sm:text-4xl"
-              style={{ animationDelay: "60ms" }}
-            >
-              Turbomachinery design,
-              <br className="hidden sm:block" />{" "}
-              <span className="text-brand">in the open.</span>
-            </h1>
+                <h1
+                  className="animate-fade-in-up max-w-2xl text-2xl font-semibold leading-[1.06] tracking-tight sm:text-3xl"
+                  style={{ animationDelay: "60ms" }}
+                >
+                  Turbomachinery design,
+                  <br className="hidden sm:block" />{" "}
+                  <span className="text-brand">in the open.</span>
+                </h1>
 
-            <p
-              className="animate-fade-in-up max-w-2xl text-md leading-relaxed text-text-muted sm:text-lg"
-              style={{ animationDelay: "120ms" }}
-            >
-              Build a cycle. Run a meanline. Sweep thousands of candidate
-              geometries against your constraints. Pick one. Ship it — every
-              loss model cited, every project a folder of text files, every run
-              reproducible.
-            </p>
+                <p
+                  className="animate-fade-in-up max-w-xl text-md leading-relaxed text-text-muted"
+                  style={{ animationDelay: "120ms" }}
+                >
+                  Build a cycle. Run a meanline. Sweep thousands of candidate
+                  geometries against your constraints. Pick one. Ship it —
+                  every loss model cited, every project a folder of text
+                  files, every run reproducible.
+                </p>
 
-            <div
-              className="animate-fade-in-up flex flex-wrap items-center gap-3 pt-1"
-              style={{ animationDelay: "180ms" }}
-            >
-              <Link href="/projects">
-                <Button size="xl" className="gap-2">
-                  Open the workspace
-                  <ArrowRight className="h-4 w-4" />
-                </Button>
-              </Link>
-              <Link href="/learn">
-                <Button size="xl" variant="outline" className="gap-2">
-                  <GraduationCap className="h-4 w-4" />
-                  Start with Learn
-                </Button>
-              </Link>
-              <span className="text-sm text-text-muted">
-                First radial-turbine sweep in about four minutes.
-              </span>
+                <div
+                  className="animate-fade-in-up flex flex-wrap items-center gap-3 pt-1"
+                  style={{ animationDelay: "180ms" }}
+                >
+                  <Link href="/projects">
+                    <Button size="xl" className="gap-2">
+                      Open the workspace
+                      <ArrowRight className="h-4 w-4" />
+                    </Button>
+                  </Link>
+                  <Link href="/learn">
+                    <Button size="xl" variant="outline" className="gap-2">
+                      <GraduationCap className="h-4 w-4" />
+                      Start with Learn
+                    </Button>
+                  </Link>
+                </div>
+
+                <p
+                  className="animate-fade-in-up text-sm text-text-muted"
+                  style={{ animationDelay: "220ms" }}
+                >
+                  First radial-turbine sweep in about four minutes.
+                </p>
+              </div>
+
+              <SolverConsole />
             </div>
 
             {/* Spec readout — hairline-segmented instrument strip. */}
             <dl
-              className="animate-fade-in-up mt-6 grid grid-cols-2 overflow-hidden rounded-sm border border-border-subtle bg-surface sm:grid-cols-4"
-              style={{ animationDelay: "240ms" }}
+              className="animate-fade-in-up mt-12 grid grid-cols-2 overflow-hidden rounded-sm border border-border-subtle bg-surface sm:grid-cols-4"
+              style={{ animationDelay: "300ms" }}
             >
               <Stat value="<200 ms" label="Recuperated Brayton solve" />
               <Stat value="2 000+" label="Candidates per sweep" />
@@ -262,6 +275,80 @@ export default function Home() {
           </div>
         </footer>
       </main>
+    </div>
+  );
+}
+
+/* ANSI-shadow logotype — the boot banner. 56 columns of pure nostalgia. */
+const ASCII_BANNER = ` ██████╗ █████╗ ███████╗ ██████╗ █████╗ ██████╗ ███████╗
+██╔════╝██╔══██╗██╔════╝██╔════╝██╔══██╗██╔══██╗██╔════╝
+██║     ███████║███████╗██║     ███████║██║  ██║█████╗
+██║     ██╔══██║╚════██║██║     ██╔══██║██║  ██║██╔══╝
+╚██████╗██║  ██║███████║╚██████╗██║  ██║██████╔╝███████╗
+ ╚═════╝╚═╝  ╚═╝╚══════╝ ╚═════╝╚═╝  ╚═╝╚═════╝ ╚══════╝`;
+
+/**
+ * Decorative boot-screen console for the hero — an honest day in Cascade
+ * compressed into one terminal session: solve, sweep, map. Static markup,
+ * CSS-only animation; numbers mirror the demo project.
+ */
+function SolverConsole() {
+  return (
+    <div
+      className="animate-fade-in-up hidden overflow-hidden rounded-sm border border-border-subtle bg-surface shadow-z2 md:block"
+      style={{ animationDelay: "150ms" }}
+      aria-hidden
+    >
+      <div className="flex items-center justify-between border-b border-border-subtle bg-surface-subtle px-3 py-1.5">
+        <span className="micro-label">Solver console</span>
+        <span className="flex items-center gap-2">
+          <span className="led led-pulse bg-semantic-success" />
+          <span className="font-mono text-[10px] text-text-muted">
+            tty1 · local
+          </span>
+        </span>
+      </div>
+
+      <div className="select-none overflow-x-auto p-4 scrollbar-subtle">
+        <pre className="font-mono text-[9px] leading-[12px] text-brand sm:text-[10px] sm:leading-[13px]">
+          {ASCII_BANNER}
+        </pre>
+        <pre className="mt-1.5 font-mono text-[10px] leading-[14px] text-text-muted">
+          {" web-native turbomachinery design · v0.1.0"}
+        </pre>
+
+        <pre className="mt-4 font-mono text-[11px] leading-[17px]">
+          <span className="text-brand">{"› "}</span>
+          <span className="text-text">{"cascade solve cycle microturbine-30kw"}</span>
+          {"\n"}
+          <span className="text-text-muted">{"  iter 12 · residual 3.2e-09   "}</span>
+          <span className="text-accent">{"█▇▅▃▂▁"}</span>
+          {"\n"}
+          <span className="text-semantic-success">{"  ✓ converged 182 ms"}</span>
+          <span className="text-text-muted">{" · η_e 0.274 · w_net 30.2 kW"}</span>
+          {"\n\n"}
+          <span className="text-brand">{"› "}</span>
+          <span className="text-text">{"cascade sweep --candidates 2000 --seed 42"}</span>
+          {"\n"}
+          <span className="text-semantic-success">{"  ✓ 1 847 solved"}</span>
+          <span className="text-text-muted">{" · 219 valid · best η_tt 0.881"}</span>
+          {"\n\n"}
+          <span className="text-brand">{"› "}</span>
+          <span className="text-text">{"cascade map --speedlines 5"}</span>
+          {"\n"}
+          <span className="text-text-muted">{"  π_tt ┤          ╭───"}</span>
+          <span className="text-accent">{"●"}</span>
+          <span className="text-text-muted">{"─╮    108 krpm\n"}</span>
+          <span className="text-text-muted">{"       │      ╭───╯    ╰──╮\n"}</span>
+          <span className="text-text-muted">{"       │   ╭──╯  96 krpm  ╰─╮\n"}</span>
+          <span className="text-text-muted">{"       └───┬───────┬───────┬───  ṁ [kg/s]\n"}</span>
+          <span className="text-semantic-success">{"  ✓ 45 points"}</span>
+          <span className="text-text-muted">{" · surge & choke explicit · 0 ambiguous codes"}</span>
+          {"\n\n"}
+          <span className="text-brand">{"› "}</span>
+          <span className="animate-led-pulse text-accent">{"█"}</span>
+        </pre>
+      </div>
     </div>
   );
 }
