@@ -15,6 +15,7 @@ import {
   Folder,
   BookOpen,
   GraduationCap,
+  History,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -48,6 +49,7 @@ const globalNav: NavItem[] = [
   { label: "Projects", Icon: Folder, href: () => "/projects" },
   { label: "Learn", Icon: GraduationCap, href: () => "/learn" },
   { label: "Docs", Icon: BookOpen, href: () => "/docs" },
+  { label: "Changelog", Icon: History, href: () => "/changelog" },
 ];
 
 export function LeftRail() {
