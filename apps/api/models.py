@@ -192,7 +192,11 @@ class JobModel(BaseModel):
     updated_at: datetime
     finished_at: Optional[datetime] = None
     error: Optional[str] = None
-    # Result is set when status == "done". Shape depends on kind.
+    # Result is set when status == "done", and also on a refused run
+    # (status == "failed" with error=None): the refusal keeps the
+    # structured failure envelope under result["failure"] so the UI can
+    # render the explanation. A crash (status == "failed" with error set)
+    # carries no result. Shape depends on kind.
     result: Optional[Dict[str, Any]] = None
 
 

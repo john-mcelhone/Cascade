@@ -82,6 +82,51 @@ class Job:
         }
 
 
+class JobRefusal(Exception):
+    """Raised by a worker when a run produces no result *by design*.
+
+    The job taxonomy has three classes (see ``run_in_worker``):
+
+    1. **Refusal** — the run produced no result: incomplete topology, an
+       invalid configuration, or a mid-solve refusal (e.g. sub-atmospheric
+       exhaust, a mean-line regime refusal). Workers raise this exception
+       and the job ends ``status="failed"`` with ``error=None`` and
+       ``result`` set to the structured failure envelope, so the UI's
+       FailurePanel renders the plain-English explanation and suggestions.
+       Classified software bugs travel the same path with the envelope's
+       ``kind == "bug"`` (and its ``bug_log``) — design-vs-bug lives inside
+       the envelope, not in the job status.
+    2. **Non-convergence** — the run completed and produced a result that
+       did not converge: the job stays ``done`` with ``converged: false``
+       (and keeps its failure envelope for the explanation).
+    3. **Crash** — an unexpected exception escaped the worker's classify
+       scaffolding: the job is ``failed`` with ``error`` set and no
+       envelope.
+
+    The refusal signature is therefore ``error is None`` plus
+    ``result["failure"]`` present, scoped to ``status == "failed"``.
+
+    Attributes:
+        envelope: the result-shaped failure envelope (the dict the cycle
+            router's ``_failure_result`` builds, carrying a ``failure`` key)
+            stored on ``job.result``.
+        message: plain-English one-liner stored on ``job.message``.
+        cause_code: stable machine-readable code for the refusal cause,
+            e.g. ``MISSING_REQUIRED_COMPONENTS``.
+    """
+
+    def __init__(
+        self,
+        envelope: Dict[str, Any],
+        message: str,
+        cause_code: str,
+    ) -> None:
+        super().__init__(message)
+        self.envelope = envelope
+        self.message = message
+        self.cause_code = cause_code
+
+
 # Module-level stores.
 JOBS: Dict[str, Job] = {}
 CANDIDATES: Dict[str, List[Dict[str, Any]]] = {}  # job_id -> candidate dicts
@@ -381,7 +426,35 @@ def run_in_worker(
         )
         try:
             result = worker(job)
+        except JobRefusal as refusal:
+            # Class 1: the run produced no result by design. Unwrap into a
+            # failed job that still carries the structured failure envelope
+            # (refusal signature: error is None + result["failure"] present).
+            if job.cancelled:
+                # cancel_job already published the final "cancelled" event;
+                # a late refusal must not overwrite the status or publish a
+                # second final event (mirrors the success-path guard below).
+                return
+            job.status = "failed"
+            job.error = None
+            job.result = refusal.envelope
+            job.message = refusal.message
+            job.updated_at = _utcnow()
+            job.finished_at = _utcnow()
+            publish_event(
+                job.id,
+                {
+                    "job_id": job.id,
+                    "status": "failed",
+                    "progress": job.progress,
+                    "message": job.message,
+                    "result": job.result,
+                },
+                final=True,
+            )
+            return
         except Exception as exc:  # noqa: BLE001
+            # Class 3: unexpected crash — error set, no failure envelope.
             job.status = "failed"
             job.error = f"{type(exc).__name__}: {exc}"
             job.message = job.error

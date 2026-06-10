@@ -98,6 +98,11 @@ logs:
 test: setup
 	@PYTHONPATH=$(PROJECT_ROOT)/src:$(PROJECT_ROOT)/apps/api \
 		$(VENV_PY) -m pytest tests/ -m "not validation and not slow" -v
+	@# apps/api/tests is a second `tests` package — it cannot share a pytest
+	@# invocation with the root tests/ (ModuleNotFoundError on collection),
+	@# so the API suite runs separately (matches apps/api/pyproject.toml).
+	@PYTHONPATH=$(PROJECT_ROOT)/src:$(PROJECT_ROOT)/apps/api \
+		$(VENV_PY) -m pytest apps/api/tests/ -m "not validation and not slow" -v
 
 test-units: setup
 	@PYTHONPATH=$(PROJECT_ROOT)/src $(VENV_PY) -m pytest tests/units -v

@@ -63,10 +63,13 @@ export function RunButton({ projectId, className }: RunButtonProps) {
           detail: ev.detail,
         });
         if (ev.done) {
-          // The backend now always returns a structured result envelope —
-          // even for solver failures it returns `succeeded` at the
-          // infrastructure level with a populated `result.failure`. So we
-          // branch on the result content, not the SSE status.
+          // Job contract: a refusal (no result produced — incomplete
+          // topology, mid-solve refusal, classified bug) arrives as status
+          // `failed` WITH a structured `result.failure` envelope; a
+          // non-converged run arrives as `done` with `converged: false`
+          // and its own envelope; an unexpected crash arrives as `failed`
+          // with no envelope. We branch on the failure envelope first so
+          // the FailurePanel renders for both refusals and non-convergence.
           const failure = ev.result?.failure;
           if (ev.status === "succeeded" && !failure) {
             finishRun("succeeded", ev.result);

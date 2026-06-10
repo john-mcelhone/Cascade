@@ -120,6 +120,7 @@ boundary is documented here so buyers understand the scope.
 | KG-302 | Offline mode | Cloud-first; offline is a v1.1+ concern. | Online only. |
 | KG-303 | Marketplace for community loss models | Citation discipline + git makes community loss models possible; marketplace UX is v1.x. | Loss models are Python plugins; community PRs welcome. |
 | KG-PLAT-01 | Real-time multi-user co-editing not implemented (ADAPT-015) | See detailed entry below. | Single-user canvas in v1.0; async git collaboration on the TOML project format. |
+| KG-PLAT-02 | Canvas edge-connectivity semantics not validated | The cycle solver infers a fixed series flow path from the component kinds present and never reads `project["edges"]`. A real connectivity validator must understand recuperator dual-port wiring (cold and hot streams cross the same component), and a naive series check would reject the working seed projects. | Edges on the Cycle Canvas are illustrative only. Refusal copy on the Cycle page discloses the kind-inferred flow path and cites this entry; no edge is required (or checked) for a solve. |
 
 ### KG-PLAT-01  Real-time collaborative editing not implemented
 

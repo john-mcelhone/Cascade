@@ -41,16 +41,43 @@ from __future__ import annotations
 
 import time
 import traceback
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, NoReturn, Optional
 
 from fastapi import APIRouter, HTTPException
 
 from deps import get_project_or_404
-from jobs import Job, publish_event, register_job, report_progress, run_in_worker
+from jobs import (
+    Job,
+    JobRefusal,
+    publish_event,
+    register_job,
+    report_progress,
+    run_in_worker,
+)
 from models import JobAcceptedResponse
 
 
 router = APIRouter(prefix="/api/projects/{project_id}/cycle", tags=["cycle"])
+
+
+class MissingRequiredComponents(ValueError):
+    """Raised by ``_build_recuperated_spec`` when the canvas lacks the
+    minimum component set for a Brayton cycle.
+
+    ``missing`` lists only the component kinds actually absent, so the
+    refusal message can name exactly what the user has to add (not always
+    all three). ``str(exc)`` is the plain-English job message.
+    """
+
+    CAUSE_CODE = "MISSING_REQUIRED_COMPONENTS"
+
+    def __init__(self, missing: List[str]) -> None:
+        self.missing = list(missing)
+        super().__init__(
+            "Cycle canvas is missing required components: "
+            + ", ".join(self.missing)
+            + "."
+        )
 
 
 def _q(d: Dict[str, Any]):
@@ -315,11 +342,17 @@ def _build_recuperated_spec(project: Dict[str, Any]):
     recup_dict = _component_by_kind(project, "Recuperator")
     inlet_loss_dict = _component_by_kind(project, "ConstantPressureLoss")
 
-    if comp_dict is None or turb_dict is None or burn_dict is None:
-        raise ValueError(
-            "Project must contain at least a Compressor, Burner, and Turbine "
-            "to be solvable as a Brayton cycle."
+    missing_kinds = [
+        kind
+        for kind, found in (
+            ("Compressor", comp_dict),
+            ("Burner", burn_dict),
+            ("Turbine", turb_dict),
         )
+        if found is None
+    ]
+    if missing_kinds:
+        raise MissingRequiredComponents(missing_kinds)
 
     # W-03 (ADAPT-036): read efficiency_mode from the component params dict.
     # The UI dropdown emits "isentropic" | "polytropic" | "live_meanline";
@@ -697,19 +730,23 @@ def _classify_failure(exc: BaseException) -> Dict[str, Any]:
             ],
         }
 
-    # Topology incompleteness (raised by _build_recuperated_spec).
-    if exc_type == "ValueError" and "must contain" in msg_lc:
+    # Topology incompleteness (raised by _build_recuperated_spec). The typed
+    # exception carries the kinds actually absent so the explanation names
+    # exactly what is missing, not always all three.
+    if isinstance(exc, MissingRequiredComponents):
+        missing = ", ".join(exc.missing)
         return {
             "kind": "design",
             "title": "Cycle is missing required components",
             "plain_english": (
-                "A Brayton cycle needs at minimum an Inlet, a Compressor, "
-                "a Burner, and a Turbine connected in series. The cycle "
-                "canvas is missing one or more of these."
+                "A Brayton cycle needs at minimum a Compressor, a Burner, "
+                f"and a Turbine. The cycle canvas is missing: {missing}."
             ),
             "suggestions": [
-                "Drag the required components onto the canvas from the left palette.",
-                "Connect them with edges from each component's output port to the next component's input port.",
+                f"Drag the missing component kind(s) onto the canvas from the left palette: {missing}.",
+                # Edges are decorative in v1 — the solver never reads them, so
+                # the refusal must not send the user off to draw wiring.
+                "Edges drawn on the canvas are illustrative in v1 — the solver infers a series flow path from the component kinds present (see KNOWN_GAPS.md, KG-PLAT-02).",
                 "The microturbine-30kw seed project is a working example you can copy from.",
             ],
         }
@@ -821,16 +858,14 @@ def _cycle_worker(project_id: str):
     def _empty_quantity(unit: str) -> Dict[str, Any]:
         return {"value": 0.0, "unit": unit}
 
-    def _failure_result(
-        failure: Dict[str, Any],
-        project: Dict[str, Any],
-    ) -> Dict[str, Any]:
+    def _failure_result(failure: Dict[str, Any]) -> Dict[str, Any]:
         """Build a result envelope when the solver couldn't produce a valid
         answer — keeps the field shape stable so the frontend's adapter
-        doesn't have to special-case missing keys."""
-        project["last_run_status"] = (
-            "non_converged" if failure.get("kind") == "design" else "error"
-        )
+        doesn't have to special-case missing keys.
+
+        Pure envelope builder: ``last_run_status`` is written directly by
+        the worker on each terminal path (done / non_converged / failed),
+        followed by a ``PROJECTS.save`` so the badge survives a restart."""
         return {
             "converged": False,
             "outer_iterations": 0,
@@ -853,6 +888,51 @@ def _cycle_worker(project_id: str):
             "failure": failure,
         }
 
+    def _refusal_message(failure: Dict[str, Any], exc: BaseException) -> str:
+        """Plain-English one-liner for ``job.message`` on a refusal."""
+        if isinstance(exc, MissingRequiredComponents):
+            # Names only the kinds actually absent — pinned by the refusal
+            # contract tests.
+            return str(exc)
+        return str(failure.get("title", "Run refused — no result produced."))
+
+    def _refusal_cause_code(failure: Dict[str, Any], exc: BaseException) -> str:
+        """Stable machine-readable cause code for a refusal."""
+        if isinstance(exc, MissingRequiredComponents):
+            return MissingRequiredComponents.CAUSE_CODE
+        # RegimeOutOfValidity carries its own stable code (e.g.
+        # OPEN_CYCLE_SUB_ATMOSPHERIC, LIVE_MEANLINE_REGIME_REFUSED).
+        code = getattr(exc, "code", None)
+        if code:
+            return str(code)
+        if failure.get("kind") == "bug":
+            return "UNEXPECTED_SOLVER_ERROR"
+        return "DESIGN_REFUSED"
+
+    def _refuse(
+        job: Job, project: Dict[str, Any], exc: BaseException
+    ) -> "NoReturn":
+        """Terminal refusal path (class 1 of the job taxonomy).
+
+        Classifies the exception into the failure envelope, persists the
+        ``failed`` badge (the worker owns project state so ``run_in_worker``
+        stays project-agnostic), and raises ``JobRefusal`` for
+        ``run_in_worker`` to unwrap into ``status="failed"`` + envelope.
+        """
+        failure = _classify_failure(exc)
+        if not job.cancelled:
+            # A cancelled job keeps whatever badge the last completed run
+            # wrote (cancel_job already owns the job's terminal state), and
+            # gets no further progress events after its final one.
+            report_progress(job, 1.0, failure["title"])
+            project["last_run_status"] = "failed"
+            PROJECTS.save(project_id)
+        raise JobRefusal(
+            envelope=_failure_result(failure),
+            message=_refusal_message(failure, exc),
+            cause_code=_refusal_cause_code(failure, exc),
+        )
+
     def worker(job: Job) -> Dict[str, Any]:
         from cascade.cycle.solver import energy_balance_report, solve_cycle
 
@@ -864,9 +944,7 @@ def _cycle_worker(project_id: str):
             spec = _build_recuperated_spec(project)
             fluid = _select_fluid(project)
         except Exception as exc:  # noqa: BLE001
-            failure = _classify_failure(exc)
-            report_progress(job, 1.0, failure["title"])
-            return _failure_result(failure, project)
+            _refuse(job, project, exc)
         # Give the SSE consumer a chance to see at least 3 events before
         # the (typically sub-second) solve finishes. The cascade cycle
         # solver is internally fast; we emit intermediate progress here.
@@ -879,15 +957,14 @@ def _cycle_worker(project_id: str):
         try:
             result = solve_cycle(spec, fluid=fluid)
         except Exception as exc:  # noqa: BLE001
-            failure = _classify_failure(exc)
-            report_progress(job, 1.0, failure["title"])
-            return _failure_result(failure, project)
+            _refuse(job, project, exc)
         if job.cancelled:
             return {}
         # Non-convergence isn't an exception — the solver sets
-        # result.converged = False and lets the caller decide. Treat this
-        # as a design issue with a friendly explanation rather than a
-        # blank failure.
+        # result.converged = False and lets the caller decide. Class 2 of
+        # the job taxonomy: the run completed and produced a result, so the
+        # job stays "done" with converged=False — it is NOT a refusal — and
+        # the failure envelope rides along for the friendly explanation.
         if not result.converged:
             failure = {
                 "kind": "design",
@@ -908,7 +985,8 @@ def _cycle_worker(project_id: str):
                 "details": f"residual = {result.residual_norm:.3e} after {result.outer_iterations} iterations",
             }
             project["last_run_status"] = "non_converged"
-            return _failure_result(failure, project)
+            PROJECTS.save(project_id)
+            return _failure_result(failure)
         report_progress(job, 0.9, "Solver converged. Packaging result.")
         time.sleep(0.02)
         # ADAPT-012: every cycle solve carries an explicit energy-balance
@@ -1025,7 +1103,10 @@ def _cycle_worker(project_id: str):
             },
             "efficiency_modes": efficiency_modes,
         }
-        project["last_run_status"] = "done" if result.converged else "non_converged"
+        # Converged run: the non-converged branch returned above, so this is
+        # always "done". Save so the badge survives a restart.
+        project["last_run_status"] = "done"
+        PROJECTS.save(project_id)
         return out
 
     return worker
