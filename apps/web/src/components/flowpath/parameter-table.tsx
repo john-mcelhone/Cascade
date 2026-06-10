@@ -172,11 +172,14 @@ function TabBar({
   counts: Record<ParameterTabKey, number>;
   validity: Record<ParameterTabKey, "ok" | "warn" | "error">;
 }) {
+  // The pane this lives in can be resized down to ~320 px; tabs must never
+  // squash or clip mid-label. Each tab is shrink-proof and the row wraps to
+  // a second line when the pane gets too narrow for all five.
   return (
     <div
       role="tablist"
       aria-label="Parameter sections"
-      className="flex items-center gap-0.5 border-b border-border-subtle bg-surface-subtle/30 px-2 py-1"
+      className="flex flex-wrap items-center gap-0.5 border-b border-border-subtle bg-surface-subtle/30 px-1.5 py-1"
     >
       {TABS.map((tab) => {
         const isActive = tab.key === active;
@@ -191,7 +194,7 @@ function TabBar({
             aria-controls={`parameter-pane-${tab.key}`}
             onClick={() => setActive(tab.key)}
             className={cn(
-              "group inline-flex h-7 items-center gap-1.5 rounded-sm px-2 text-xs transition-colors",
+              "group inline-flex h-6 shrink-0 items-center gap-1 whitespace-nowrap rounded-sm px-1.5 text-xs transition-colors",
               isActive
                 ? "bg-surface-default font-medium text-text shadow-z1"
                 : "text-text-muted hover:bg-surface-default/60 hover:text-text",
