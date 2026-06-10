@@ -24,7 +24,7 @@ make setup && make run   # then open http://localhost:3000/projects/microturbine
 
 ## Why this exists
 
-Preliminary turbomachinery design runs on a handful of excellent proprietary suites — quote-only pricing where the few public data points run well into five figures per seat-year, none of them web-native, none of them open ([market survey, June 2026](docs/research/competitive-landscape.md)). If you are a three-person team building a 30 kW natural-gas microturbine, the tooling bill can rival the hardware budget. Cascade is the open alternative: free to self-host, forever — that's the license, not a tier.
+Preliminary turbomachinery design runs on a handful of excellent proprietary suites — quote-only pricing where the few public data points run well into five figures per seat-year, none of them web-native, none of them open. If you are a three-person team building a 30 kW natural-gas microturbine, the tooling bill can rival the hardware budget. Cascade is the open alternative: free to self-host, forever — that's the license, not a tier.
 
 Three rules keep it honest:
 
