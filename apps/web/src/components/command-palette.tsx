@@ -11,6 +11,7 @@ import {
   Folder,
   GraduationCap,
   Grid3x3,
+  History,
   ListOrdered,
   Moon,
   Network,
@@ -70,6 +71,13 @@ const navItems: PaletteRoute[] = [
     Icon: BookOpen,
     href: "/docs/validation",
     keywords: ["benchmark", "pass-gates", "qa"],
+  },
+  {
+    label: "Changelog",
+    group: "Help",
+    Icon: History,
+    href: "/changelog",
+    keywords: ["updates", "releases", "what's new", "history"],
   },
 ];
 

@@ -225,6 +225,9 @@ export default function Home() {
               <Link href="/docs/validation" className="hover:text-text">
                 Validation
               </Link>
+              <Link href="/changelog" className="hover:text-text">
+                Changelog
+              </Link>
               <Link href="/terms" className="hover:text-text">
                 Terms
               </Link>
