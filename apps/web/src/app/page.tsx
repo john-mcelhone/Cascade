@@ -14,6 +14,7 @@ import {
 import { Logo, CascadeMark } from "@/components/shell/logo";
 import { Button } from "@/components/ui/button";
 import { AsciiWindTunnel } from "@/components/marketing/ascii-wind-tunnel";
+import { AsciiTurbine } from "@/components/marketing/ascii-turbine";
 
 /**
  * Cascade landing page — the front door for both audiences: a curious
@@ -293,18 +294,11 @@ export default function Home() {
   );
 }
 
-/* ANSI-shadow logotype — the boot banner. 56 columns of pure nostalgia. */
-const ASCII_BANNER = ` ██████╗ █████╗ ███████╗ ██████╗ █████╗ ██████╗ ███████╗
-██╔════╝██╔══██╗██╔════╝██╔════╝██╔══██╗██╔══██╗██╔════╝
-██║     ███████║███████╗██║     ███████║██║  ██║█████╗
-██║     ██╔══██║╚════██║██║     ██╔══██║██║  ██║██╔══╝
-╚██████╗██║  ██║███████║╚██████╗██║  ██║██████╔╝███████╗
- ╚═════╝╚═╝  ╚═╝╚══════╝ ╚═════╝╚═╝  ╚═╝╚═════╝ ╚══════╝`;
-
 /**
- * Decorative boot-screen console for the hero — an honest day in Cascade
- * compressed into one terminal session: solve, sweep, map. Static markup,
- * CSS-only animation; numbers mirror the demo project.
+ * Decorative boot-screen console for the hero. The centerpiece is a live
+ * spinning ASCII radial-inflow rotor (hover to spool it up); below it, a
+ * short solver session with real vocabulary. Numbers mirror the demo
+ * project. Static markup + canvas; no functionality.
  */
 function SolverConsole() {
   return (
@@ -323,15 +317,17 @@ function SolverConsole() {
         </span>
       </div>
 
-      <div className="select-none overflow-x-auto p-4 scrollbar-subtle">
-        <pre className="font-mono text-[9px] leading-[12px] text-brand sm:text-[10px] sm:leading-[13px]">
-          {ASCII_BANNER}
-        </pre>
-        <pre className="mt-1.5 font-mono text-[10px] leading-[14px] text-text-muted">
-          {" web-native turbomachinery design · v0.1.0"}
-        </pre>
+      {/* Spinning ASCII rotor — hover to spool up. */}
+      <AsciiTurbine height={216} className="border-b border-border-subtle/60" />
+      <div className="flex items-center justify-between px-4 py-1.5">
+        <span className="font-mono text-[10px] text-text-muted">
+          radial-inflow rotor · 7 blades · N 96 000 rpm
+        </span>
+        <span className="micro-label !text-brand-text">hover to spool up</span>
+      </div>
 
-        <pre className="mt-4 font-mono text-[11px] leading-[17px]">
+      <div className="select-none overflow-x-auto border-t border-border-subtle/60 p-4 pt-3 scrollbar-subtle">
+        <pre className="font-mono text-[11px] leading-[17px]">
           <span className="text-brand">{"› "}</span>
           <span className="text-text">{"cascade solve cycle microturbine-30kw"}</span>
           {"\n"}
@@ -350,12 +346,6 @@ function SolverConsole() {
           <span className="text-brand">{"› "}</span>
           <span className="text-text">{"cascade map --speedlines 5"}</span>
           {"\n"}
-          <span className="text-text-muted">{"  π_tt ┤          ╭───"}</span>
-          <span className="text-accent">{"●"}</span>
-          <span className="text-text-muted">{"─╮    108 krpm\n"}</span>
-          <span className="text-text-muted">{"       │      ╭───╯    ╰──╮\n"}</span>
-          <span className="text-text-muted">{"       │   ╭──╯  96 krpm  ╰─╮\n"}</span>
-          <span className="text-text-muted">{"       └───┬───────┬───────┬───  ṁ [kg/s]\n"}</span>
           <span className="text-semantic-success">{"  ✓ 45 points"}</span>
           <span className="text-text-muted">{" · surge & choke explicit · 0 ambiguous codes"}</span>
           {"\n\n"}

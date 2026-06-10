@@ -58,9 +58,10 @@ mission control) without falling into the monospace-everywhere cliché:
   wake instrument-amber. Honors `prefers-reduced-motion` (single static
   frame), pauses off-screen, ~30 fps capped, theme-aware via tokens.
   Beside it: a Fraunces display headline with italic cyan accent, a
-  boot-screen **solver console** (ANSI-shadow CASCADE banner, session log,
-  ASCII speedline map, blinking cursor), and a hairline-segmented **spec
-  readout** strip (`<200 ms`, `2 000+`, `100 %`, `AGPL-3.0`); audience
+  boot-screen **solver console** topped by a live **spinning ASCII
+  radial-inflow rotor** (seven log-spiral blades on a canvas character
+  grid; hover to spool it up) over a short session log with a blinking
+  cursor, and a hairline-segmented **spec readout** strip (`<200 ms`, `2 000+`, `100 %`, `AGPL-3.0`); audience
   panels with terminal header strips; a numbered `01/04` pipeline; dense
   mono footer.
 - **Projects** — cards became instrument panels: a header strip with the
