@@ -2,7 +2,9 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
+import Link from "next/link";
 import { useTheme } from "next-themes";
+import { ArrowUpRight } from "lucide-react";
 import type {
   Layout,
   PlotMouseEvent,
@@ -21,6 +23,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { useFlowPathStore } from "@/lib/flowpath/store";
 import type { ServerCandidate } from "@/lib/api/flowpath";
@@ -269,6 +272,7 @@ export function DesignScatter({ projectId }: DesignScatterProps) {
   return (
     <div className="flex h-full flex-col">
       <ScatterTopBar
+        projectId={projectId}
         axes={axes}
         x={scatterX}
         y={scatterY}
@@ -381,6 +385,7 @@ function isDark(theme: string | undefined): boolean {
 }
 
 interface ScatterTopBarProps {
+  projectId: string;
   axes: ReturnType<typeof useFlowPathParameterAxes>;
   x: string;
   y: string;
@@ -396,6 +401,7 @@ interface ScatterTopBarProps {
 }
 
 function ScatterTopBar({
+  projectId,
   axes,
   x,
   y,
@@ -448,6 +454,27 @@ function ScatterTopBar({
           {candidates.length} candidates · {valid.length} valid
           {brushed && <> · {brushed.length} brushed</>}
         </span>
+        {/* U8: explicit, focusable navigation affordance — a single click
+            on the scatter keeps the preview in place; THIS is how you open
+            the deep-linkable candidate detail route. Never a raw Plotly
+            canvas handler. */}
+        {picked && (
+          <Button
+            asChild
+            variant="outline"
+            size="sm"
+            className="h-6 gap-1 px-2 text-xs"
+          >
+            <Link
+              href={`/projects/${encodeURIComponent(projectId)}/flowpath/${encodeURIComponent(picked)}`}
+              aria-label={`Open detail page for candidate ${picked}`}
+              data-testid="open-candidate-detail"
+            >
+              Open detail
+              <ArrowUpRight className="h-3 w-3" aria-hidden />
+            </Link>
+          </Button>
+        )}
       </div>
 
       {/* Filter row (W-09) */}

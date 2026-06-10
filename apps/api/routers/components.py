@@ -92,6 +92,33 @@ def update_component(
     )
 
 
+@router.delete(
+    "/{component_id}/geometry", status_code=status.HTTP_204_NO_CONTENT
+)
+def detach_component_geometry(project_id: str, component_id: str) -> None:
+    """Detach hand-off geometry from a component (U8).
+
+    Removes ``geometry_params`` and ``meanline_rpm_rpm`` from the
+    component's params bag entirely and saves through to the TOML store.
+    This is the sanctioned escape hatch alongside switching the efficiency
+    mode back to fixed-isentropic: after a detach the live-meanline path
+    falls back to constant-η (no geometry → graceful fallback) and a future
+    handoff starts from a clean bag.
+    """
+    proj = get_project_or_404(project_id)
+    for comp in proj.setdefault("components", []):
+        if comp["id"] == component_id:
+            params: Dict[str, Any] = comp.setdefault("params", {})
+            params.pop("geometry_params", None)
+            params.pop("meanline_rpm_rpm", None)
+            PROJECTS.save(project_id)
+            return None
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail=f"Component {component_id!r} not found in project {project_id!r}.",
+    )
+
+
 @router.delete("/{component_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_component(project_id: str, component_id: str) -> None:
     proj = get_project_or_404(project_id)

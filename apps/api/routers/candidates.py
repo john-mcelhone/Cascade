@@ -15,8 +15,15 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException, Query, Response, status
 
-from jobs import CANDIDATE_INDEX, CANDIDATES
-from models import CandidateModel
+from jobs import CANDIDATE_INDEX, CANDIDATES, PROJECTS
+from models import (
+    CandidateModel,
+    MergedGeometryResponse,
+    PinCandidateRequest,
+    PinCandidateResponse,
+    SendToCycleRequest,
+    SendToCycleResponse,
+)
 
 
 router = APIRouter(prefix="/api/candidates", tags=["candidates"])
@@ -97,6 +104,302 @@ def get_candidate(candidate_id: str) -> CandidateModel:
             detail=f"Candidate {candidate_id!r} not found.",
         )
     return CandidateModel.model_validate(cand)
+
+
+# ---- Geometry handoff (U8) -------------------------------------------------
+#
+# One writer, one canonical location: "Send to cycle" is the product's only
+# writer for cycle-component geometry. It serializes the result of
+# ``build_cc_geometry(sample=candidate.params)`` — the same normative merge
+# the explore evaluator ran (key rename, r2-scaling of inducer dimensions,
+# candidate-scaled rpm) — and REPLACES the Compressor component's
+# ``params.geometry_params`` subtree wholesale (never key-merge: under the
+# refusal contract a stale partial bag would otherwise be permanently
+# poisoned with no documented escape). The endpoint saves through
+# ``PROJECTS.save`` because component PATCH-style in-place cache mutation
+# does not flush to disk on its own.
+#
+# No project-level mirror is written (the project schema's to_legacy_dict
+# drops a top-level geometry_params key — see the plan's KTD); the map path
+# is intentionally unchanged.
+
+
+def _candidate_scoped_or_404(candidate_id: str, project_id: str) -> Dict[str, Any]:
+    """Resolve a candidate, guarding project scope.
+
+    Cross-project access presents as not-found (the candidate does not
+    exist *for this project*) — mirrors the detail page's route guard.
+    """
+    cand = CANDIDATE_INDEX.get(candidate_id)
+    if cand is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=(
+                f"Candidate {candidate_id!r} not found. Exploration "
+                "candidates are held in memory and expire on server "
+                "restart — re-run the exploration to regenerate them."
+            ),
+        )
+    if cand.get("project_id") != project_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=(
+                f"Candidate {candidate_id!r} not found for project "
+                f"{project_id!r}."
+            ),
+        )
+    return cand
+
+
+def _merged_cc_geometry(cand: Dict[str, Any]):
+    """Run the normative merge for a candidate.
+
+    Returns ``(geom, op, geometry_params)`` where ``geometry_params`` is the
+    geometry dataclass serialized to plain SI floats (``None`` optionals are
+    skipped — TOML cannot hold null, and the cycle builder treats absent
+    keys as "use the solver default", which is exactly what ``None`` means
+    on the dataclass).
+    """
+    import dataclasses as _dc
+
+    from routers._meanline_geom import build_cc_geometry
+
+    try:
+        geom, op = build_cc_geometry(sample=cand.get("params", {}))
+    except Exception as exc:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "error_code": "CANDIDATE_GEOMETRY_INVALID",
+                "message": (
+                    "The candidate's parameters do not produce a valid "
+                    f"impeller geometry: {exc}"
+                ),
+            },
+        ) from exc
+    geometry_params: Dict[str, float] = {}
+    for f in _dc.fields(geom):
+        v = getattr(geom, f.name)
+        if v is None:
+            continue
+        geometry_params[f.name] = float(v)
+    return geom, op, geometry_params
+
+
+def _design_point_solve(geom, op):  # type: ignore[no-untyped-def]
+    """Solve the mean-line at the candidate's design point.
+
+    Mirrors the explore evaluator's solve exactly (same solver, same loss
+    model, same inlet construction) so the design-point pressure ratio used
+    for alignment is the one the scatter point was scored at.
+    """
+    from cascade.meanline import AungierCentrifugal, CentrifugalCompressorMeanline
+    from cascade.units import Composition, Port, Q
+
+    inlet = Port(
+        pressure_total=Q(op["pressure_total_Pa"], "Pa"),
+        temperature_total=Q(op["temperature_total_K"], "K"),
+        mass_flow=Q(op["mass_flow_kg_per_s"], "kg/s"),
+        composition=Composition.air(),
+    )
+    solver = CentrifugalCompressorMeanline()
+    return solver.solve(inlet, Q(op["rpm"], "rpm"), geom, AungierCentrifugal())
+
+
+@router.get(
+    "/{candidate_id}/merged-geometry", response_model=MergedGeometryResponse
+)
+def candidate_merged_geometry(
+    candidate_id: str,
+    project_id: str = Query(description="Project the candidate belongs to."),
+) -> MergedGeometryResponse:
+    """Return the full merged geometry set the candidate resolves to.
+
+    This is the exact key set "Send to cycle" would write — the detail
+    page renders it as the merged parameter table so the user sees the
+    geometry actually used, not just the 3 sampled params.
+    """
+    from routers._meanline_geom import _EXPLORE_PARAM_MAP
+
+    cand = _candidate_scoped_or_404(candidate_id, project_id)
+    _geom, op, geometry_params = _merged_cc_geometry(cand)
+    sampled_keys = [
+        geom_key
+        for sobol_key, geom_key in _EXPLORE_PARAM_MAP.items()
+        if sobol_key in (cand.get("params") or {})
+    ]
+    return MergedGeometryResponse(
+        candidate_id=candidate_id,
+        machine_class="centrifugal_compressor",
+        geometry_params=geometry_params,
+        operating_point=dict(op),
+        sampled_keys=sampled_keys,
+        meanline_rpm_rpm=float(op["rpm"]),
+    )
+
+
+@router.post("/{candidate_id}/send-to-cycle", response_model=SendToCycleResponse)
+def send_candidate_to_cycle(
+    candidate_id: str, req: SendToCycleRequest
+) -> SendToCycleResponse:
+    """Write the candidate's merged geometry onto the project's Compressor.
+
+    Replaces ``params.geometry_params`` WHOLESALE and sets
+    ``params.meanline_rpm_rpm`` from the candidate-scaled rpm, then saves
+    the project to the TOML store so the handoff survives a restart.
+
+    With ``align_operating_point`` (default on) the endpoint also sets the
+    compressor's ``pressure_ratio`` and the project boundary-condition mass
+    flow to the candidate's design point, mirroring the Inlet component's
+    params so the canvas chips stay truthful.
+    """
+    cand = _candidate_scoped_or_404(candidate_id, req.project_id)
+    project = PROJECTS.get(req.project_id)
+    if project is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Project {req.project_id!r} not found.",
+        )
+    if cand.get("status") != "VALID":
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "error_code": "CANDIDATE_NOT_VALID",
+                "message": (
+                    f"Candidate {candidate_id!r} has status "
+                    f"{cand.get('status')!r} — its own design point refused, "
+                    "so its geometry cannot honestly drive the cycle "
+                    "co-simulation."
+                ),
+                "suggestions": [
+                    "Pick a VALID candidate from the scatter.",
+                    "Re-run the exploration with narrower parameter ranges.",
+                ],
+            },
+        )
+    compressor = next(
+        (
+            c
+            for c in project.get("components", []) or []
+            if c.get("kind") == "Compressor"
+        ),
+        None,
+    )
+    if compressor is None:
+        # Synchronous design-class refusal: a blank canvas can legitimately
+        # host candidates, but there is nothing to write geometry onto.
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "error_code": "NO_COMPRESSOR_COMPONENT",
+                "message": (
+                    "This project's cycle canvas has no Compressor "
+                    "component to receive the candidate's geometry."
+                ),
+                "suggestions": [
+                    "Add a Compressor to the cycle canvas, then send the candidate again.",
+                    "The microturbine-30kw seed project is a working example you can copy from.",
+                ],
+            },
+        )
+
+    geom, op, geometry_params = _merged_cc_geometry(cand)
+    params = compressor.setdefault("params", {})
+    # REPLACE, never merge — a stale extra key from an earlier handoff (or
+    # hand edit) must not survive into the new bag.
+    params["geometry_params"] = geometry_params
+    params["meanline_rpm_rpm"] = float(op["rpm"])
+
+    aligned = False
+    pressure_ratio: Optional[float] = None
+    mass_flow: Optional[float] = None
+    if req.align_operating_point:
+        try:
+            result = _design_point_solve(geom, op)
+        except Exception as exc:
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "error_code": "ALIGNMENT_SOLVE_FAILED",
+                    "message": (
+                        "Could not solve the candidate's design point to "
+                        f"derive the cycle pressure ratio: {exc}"
+                    ),
+                    "suggestions": [
+                        "Send without operating-point alignment (the cycle keeps its current PR and mass flow).",
+                    ],
+                },
+            ) from exc
+        pressure_ratio = float(result.pressure_ratio_tt)
+        mass_flow = float(op["mass_flow_kg_per_s"])
+        params["pressure_ratio"] = pressure_ratio
+        bc = project.setdefault("boundary_conditions", {})
+        bc["mass_flow"] = {"value": mass_flow, "unit": "kg/s"}
+        # Mirror onto the Inlet component (the canvas node renders its own
+        # params, and component PATCH mirrors the other way — keep the two
+        # representations consistent).
+        for comp in project.get("components", []) or []:
+            if comp.get("kind") == "Inlet":
+                comp.setdefault("params", {})["mass_flow"] = {
+                    "value": mass_flow,
+                    "unit": "kg/s",
+                }
+        aligned = True
+
+    # Save-through: component-level cache mutation does not flush on its
+    # own; an unsaved handoff would die on restart.
+    PROJECTS.save(req.project_id)
+    return SendToCycleResponse(
+        project_id=req.project_id,
+        candidate_id=candidate_id,
+        component_id=str(compressor.get("id")),
+        geometry_params=geometry_params,
+        meanline_rpm_rpm=float(op["rpm"]),
+        aligned=aligned,
+        pressure_ratio=pressure_ratio,
+        mass_flow_kg_per_s=mass_flow,
+    )
+
+
+@router.post("/{candidate_id}/pin", response_model=PinCandidateResponse)
+def pin_candidate(
+    candidate_id: str, req: PinCandidateRequest
+) -> PinCandidateResponse:
+    """Pin a candidate as the project's active candidate, persisted to TOML.
+
+    Candidates are ephemeral (in-memory, die on restart); pins persist.
+    Writes ``settings.active_candidate_id`` plus a full params snapshot
+    under ``settings.pinned_candidates[cid]`` so the pinned design survives
+    a server restart even after the candidate index is gone.
+    """
+    cand = _candidate_scoped_or_404(candidate_id, req.project_id)
+    project = PROJECTS.get(req.project_id)
+    if project is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Project {req.project_id!r} not found.",
+        )
+    # Snapshot only TOML-representable values (no None anywhere in the
+    # candidate dict shape the explore worker builds).
+    snapshot: Dict[str, Any] = {
+        "id": cand["id"],
+        "job_id": cand.get("job_id", ""),
+        "index": int(cand.get("index", 0)),
+        "params": dict(cand.get("params") or {}),
+        "objectives": dict(cand.get("objectives") or {}),
+        "constraints": dict(cand.get("constraints") or {}),
+        "status": str(cand.get("status", "VALID")),
+    }
+    settings = project.setdefault("settings", {})
+    settings["active_candidate_id"] = candidate_id
+    pinned = settings.setdefault("pinned_candidates", {})
+    pinned[candidate_id] = snapshot
+    PROJECTS.save(req.project_id)
+    return PinCandidateResponse(
+        project_id=req.project_id,
+        active_candidate_id=candidate_id,
+        snapshot=snapshot,
+    )
 
 
 @router.get(

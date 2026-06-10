@@ -228,12 +228,83 @@ class ExploreRequest(BaseModel):
 class CandidateModel(BaseModel):
     id: str
     job_id: str
+    # U8: candidates are project-scoped — the in-memory dicts have always
+    # carried project_id (the explore worker writes it); exposing it lets
+    # the candidate detail page guard cross-project routes client-side.
+    project_id: Optional[str] = None
     index: int
     params: Dict[str, Any] = Field(default_factory=dict)
     objectives: Dict[str, float] = Field(default_factory=dict)
     constraints: Dict[str, bool] = Field(default_factory=dict)
     status: str = "VALID"
     error_message: Optional[str] = None
+
+
+# ---------------------------------------------------------------------------
+# Candidate geometry handoff (U8)
+# ---------------------------------------------------------------------------
+
+
+class MergedGeometryResponse(BaseModel):
+    """The full merged geometry a candidate actually resolves to.
+
+    Built by the same ``build_cc_geometry(sample=candidate.params)`` helper
+    the explore evaluator uses (key rename, r2-scaling of inducer
+    dimensions, candidate rpm) — NOT the bare 3 sampled params. This is the
+    exact key set "Send to cycle" writes into the Compressor component's
+    ``geometry_params`` bag, so the detail page's parameter table and the
+    cycle co-simulation can never disagree.
+    """
+
+    candidate_id: str
+    machine_class: str
+    # Plain SI floats keyed by geometry dataclass field name.
+    geometry_params: Dict[str, float] = Field(default_factory=dict)
+    # Candidate design point: mass_flow_kg_per_s, rpm, pressure_total_Pa,
+    # temperature_total_K (floats) + fluid (str).
+    operating_point: Dict[str, Any] = Field(default_factory=dict)
+    # Geometry field names that were directly driven by the Sobol' sample
+    # (the rest are r2-scaled / reference defaults).
+    sampled_keys: List[str] = Field(default_factory=list)
+    meanline_rpm_rpm: float
+
+
+class SendToCycleRequest(BaseModel):
+    """Body for POST /api/candidates/{cid}/send-to-cycle."""
+
+    project_id: str
+    # Default-on alignment: explore candidates are built at a conservative
+    # reference tip speed (PR ≈ 1.8) while the seed cycles impose higher
+    # pressure ratios — geometry+rpm alone would run the co-sim deep
+    # off-design. Alignment sets the cycle compressor's pressure_ratio and
+    # the project boundary-condition mass flow to the candidate's design
+    # point. Without it a live-meanline refusal is the expected outcome.
+    align_operating_point: bool = True
+
+
+class SendToCycleResponse(BaseModel):
+    project_id: str
+    candidate_id: str
+    component_id: str
+    geometry_params: Dict[str, float] = Field(default_factory=dict)
+    meanline_rpm_rpm: float
+    aligned: bool
+    # Present only when aligned=True.
+    pressure_ratio: Optional[float] = None
+    mass_flow_kg_per_s: Optional[float] = None
+
+
+class PinCandidateRequest(BaseModel):
+    """Body for POST /api/candidates/{cid}/pin."""
+
+    project_id: str
+
+
+class PinCandidateResponse(BaseModel):
+    project_id: str
+    active_candidate_id: str
+    # The params snapshot persisted under settings.pinned_candidates[cid].
+    snapshot: Dict[str, Any] = Field(default_factory=dict)
 
 
 # ---------------------------------------------------------------------------

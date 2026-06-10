@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import logging
 from contextlib import asynccontextmanager
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from fastapi import FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -142,8 +142,15 @@ def create_app() -> FastAPI:
     # ---- Jobs surface (defined here because it spans projects) ----
 
     @app.get("/api/jobs", response_model=List[JobModel])
-    def get_jobs() -> List[JobModel]:
-        return [JobModel.model_validate(j.to_dict()) for j in list_jobs()]
+    def get_jobs(project_id: Optional[str] = None) -> List[JobModel]:
+        """List jobs, optionally scoped to one project (U8 runs page).
+
+        Newest first — the runs page reads top-down.
+        """
+        jobs_list = sorted(
+            list_jobs(project_id), key=lambda j: j.created_at, reverse=True
+        )
+        return [JobModel.model_validate(j.to_dict()) for j in jobs_list]
 
     @app.get("/api/jobs/{job_id}", response_model=JobModel)
     def get_job_endpoint(job_id: str) -> JobModel:

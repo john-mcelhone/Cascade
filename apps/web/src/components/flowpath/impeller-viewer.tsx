@@ -46,12 +46,47 @@ const Canvas = dynamic(
 );
 
 /**
- * The pane currently sources its state entirely from the flow-path Zustand
- * store, so it takes no props.
+ * Store-connected viewer for the Flow Path PD page: sources the picked
+ * candidate from the flow-path Zustand store. Thin wrapper over the
+ * prop-driven `ImpellerViewerView` (which the candidate detail page uses
+ * directly — that page is self-sufficient from the URL and never assumes
+ * a warm store).
  */
 export function ImpellerViewer() {
   const pickedId = useFlowPathStore((s) => s.pickedCandidateId);
   const candidates = useFlowPathStore((s) => s.candidates);
+
+  const pickedCandidate = useMemo(
+    () => candidates.find((c) => c.id === pickedId) ?? null,
+    [candidates, pickedId],
+  );
+
+  return (
+    <ImpellerViewerView candidateId={pickedId} candidate={pickedCandidate} />
+  );
+}
+
+interface ImpellerViewerViewProps {
+  /** Candidate id driving the streamed glTF; null renders the empty state. */
+  candidateId: string | null;
+  /** Candidate record for the HUD + procedural placeholder silhouette. */
+  candidate: import("@/lib/api/flowpath").ServerCandidate | null;
+  /** Hide the bottom download strip (the detail page hosts its own). */
+  hideDownloads?: boolean;
+}
+
+/**
+ * Prop-driven 3D viewer (U8). Viewer *settings* (display mode, shading,
+ * HUD) stay in the persisted store — they are user preferences shared
+ * across surfaces — but the candidate itself arrives via props. Stub-mesh
+ * header handling is preserved: `useGltfStream` reads `X-Cascade-Stub` and
+ * the procedural placeholder fills in while (or when) no real mesh exists.
+ */
+export function ImpellerViewerView({
+  candidateId,
+  candidate,
+  hideDownloads = false,
+}: ImpellerViewerViewProps) {
   const displayMode = useFlowPathStore((s) => s.displayMode);
   const shading = useFlowPathStore((s) => s.shading);
   const setDisplayMode = useFlowPathStore((s) => s.setDisplayMode);
@@ -59,10 +94,8 @@ export function ImpellerViewer() {
   const showHud = useFlowPathStore((s) => s.showHud);
   const { resolvedTheme } = useTheme();
 
-  const pickedCandidate = useMemo(
-    () => candidates.find((c) => c.id === pickedId) ?? null,
-    [candidates, pickedId],
-  );
+  const pickedId = candidateId;
+  const pickedCandidate = candidate;
 
   const url = pickedId ? geometryUrl(pickedId, "standard") : null;
 
@@ -107,7 +140,7 @@ export function ImpellerViewer() {
           right indicates orientation.
         </a>
       </div>
-      <DownloadStrip pickedId={pickedId} />
+      {!hideDownloads && <DownloadStrip pickedId={pickedId} />}
     </div>
   );
 }
@@ -487,7 +520,7 @@ const CAD_UNAVAILABLE_TOOLTIP =
   "CAD export requires the cascade[cad] extra. " +
   "Install with: pip install 'cascade[cad]' or contact support.";
 
-function DownloadStrip({ pickedId }: { pickedId: string | null }) {
+export function DownloadStrip({ pickedId }: { pickedId: string | null }) {
   // W-19: Probe the /api/health/cad endpoint (richer than _cad/available)
   // so the UI can disable STEP/IGES buttons proactively and show the
   // OCCT version in the tooltip when available.

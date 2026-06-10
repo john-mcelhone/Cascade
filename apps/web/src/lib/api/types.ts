@@ -205,6 +205,19 @@ export interface RunRecord {
   finishedAt?: string;
   durationMs?: number;
   summary?: string;
+  /**
+   * For explore runs: the best candidate's id (from the job result's
+   * `best_id`), so the runs page can deep-link to the candidate detail
+   * route. Absent for other kinds or unfinished/refused explorations.
+   */
+  bestCandidateId?: string;
+  /**
+   * A refused run (U1 refusal contract): status `failed` with `error`
+   * null and a structured failure envelope on the result. The runs page
+   * shows the failed badge either way; this flag distinguishes a refusal
+   * from a crash in the summary copy.
+   */
+  refused?: boolean;
 }
 
 export interface JobProgressEvent {
@@ -739,7 +752,10 @@ export interface ApiClient {
   getMaterial(name: string): Promise<MaterialRecord>;
 
   /** Manufacturability check (ADAPT-032). */
-  getManufacturability(projectId: string): Promise<ManufacturabilityReport>;
+  getManufacturability(
+    projectId: string,
+    candidateId?: string,
+  ): Promise<ManufacturabilityReport>;
   setManufacturabilityOverrides(
     projectId: string,
     overrides: Record<string, number>,

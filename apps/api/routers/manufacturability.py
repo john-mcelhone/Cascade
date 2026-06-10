@@ -23,7 +23,7 @@ from __future__ import annotations
 import math
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, Body
+from fastapi import APIRouter, Body, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field
 
 from deps import get_project_or_404
@@ -174,17 +174,92 @@ def _geometry_summary(geometry: Any, machine_class: str) -> Dict[str, Any]:
     }
 
 
+def _resolve_routed_candidate_geometry(
+    project: Dict[str, Any], machine_class: str, candidate_id: str
+) -> tuple[Any, str]:
+    """Build the geometry for an explicitly routed ``candidate_id`` (U8).
+
+    Unlike the active-candidate heuristic above (which key-merges the 3
+    sampled params into the machine-class defaults), the routed path uses
+    the normative merge helpers from ``_meanline_geom`` — the same rename +
+    r2-scaling the explore evaluator and the geometry handoff use — so the
+    candidate detail page's verdict is measured on the geometry the
+    candidate actually resolves to.
+    """
+    cand = CANDIDATE_INDEX.get(candidate_id)
+    if cand is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=(
+                f"Candidate {candidate_id!r} not found. Exploration "
+                "candidates are held in memory and expire on server "
+                "restart — re-run the exploration to regenerate them."
+            ),
+        )
+    if cand.get("project_id") != project.get("id"):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=(
+                f"Candidate {candidate_id!r} not found for project "
+                f"{project.get('id')!r}."
+            ),
+        )
+    from routers._meanline_geom import build_cc_geometry, build_rit_geometry
+
+    builder = (
+        build_cc_geometry
+        if machine_class == "centrifugal_compressor"
+        else build_rit_geometry
+    )
+    try:
+        geom, _op = builder(sample=cand.get("params") or {})
+    except Exception as exc:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "error_code": "CANDIDATE_GEOMETRY_INVALID",
+                "message": (
+                    "The candidate's parameters do not produce a valid "
+                    f"geometry: {exc}"
+                ),
+            },
+        ) from exc
+    name = project.get("name", project.get("id", "geometry"))
+    return geom, name
+
+
 @router.get("", response_model=ManufacturabilityResponse)
-def get_manufacturability(project_id: str) -> ManufacturabilityResponse:
+def get_manufacturability(
+    project_id: str,
+    candidate_id: Optional[str] = Query(
+        default=None,
+        description=(
+            "Check this specific exploration candidate instead of the "
+            "pinned/latest-VALID heuristic. 404 when unknown or expired."
+        ),
+    ),
+) -> ManufacturabilityResponse:
     """Run the manufacturability check on the project's active candidate.
 
     Pulls per-project overrides from
     ``project.settings.manufacturability_overrides`` and merges them into the
     rule set. Returns the report JSON with full violation / pass detail.
+
+    With ``candidate_id`` (U8 — candidate detail page) the check runs on
+    that candidate's merged geometry; otherwise the active candidate is
+    resolved via ``settings.active_candidate_id`` or the latest VALID
+    candidate of the most recent exploration job.
     """
     project = get_project_or_404(project_id)
     machine_class = _resolve_machine_class(project)
-    geometry, geometry_name, candidate_id = _resolve_geometry(project, machine_class)
+    if candidate_id is not None:
+        geometry, geometry_name = _resolve_routed_candidate_geometry(
+            project, machine_class, candidate_id
+        )
+    else:
+        geometry, geometry_name, candidate_id = _resolve_geometry(
+            project, machine_class
+        )
 
     overrides = (project.get("settings", {}) or {}).get(
         "manufacturability_overrides", {}
