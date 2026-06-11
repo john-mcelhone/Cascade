@@ -50,20 +50,15 @@ mission control) without falling into the monospace-everywhere cliché:
 
 - **Logo** — the three stepping blades now sit in a machined square frame,
   flat brand cyan, paired with an uppercase letterspaced wordmark.
-- **Landing page** — the hero is a live **ASCII wind tunnel**: real 2-D
-  potential flow (uniform stream + doublet + vortex) rendered as a canvas
-  character grid. The cursor is a body in the flow — streamlines bend
-  around it, cells go brand-cyan where the flow accelerates at its
-  shoulders, and holding the pointer spins up circulation that turns the
-  wake instrument-amber. Honors `prefers-reduced-motion` (single static
-  frame), pauses off-screen, ~30 fps capped, theme-aware via tokens.
-  Beside it: a Fraunces display headline with italic cyan accent, a
-  boot-screen **solver console** topped by a live **spinning ASCII
-  radial-inflow rotor** (seven log-spiral blades on a canvas character
-  grid; hover to spool it up) over a short session log with a blinking
-  cursor, and a hairline-segmented **spec readout** strip (`<200 ms`, `2 000+`, `100 %`, `AGPL-3.0`); audience
-  panels with terminal header strips; a numbered `01/04` pipeline; dense
-  mono footer.
+- **Landing page** — the hero is fronted by an **ASCII rotor mural**: a
+  large, faint radial-inflow wheel — five log-spiral blades at constant
+  spatial thickness on a canvas character grid — turning very slowly
+  behind the headline. No interactivity, by design; it honors
+  `prefers-reduced-motion` (static frame), pauses off-screen, ~15 fps,
+  theme-aware via tokens. In front: a Fraunces display headline with
+  italic cyan accent and a hairline-segmented **spec readout** strip
+  (`<200 ms`, `2 000+`, `100 %`, `AGPL-3.0`); audience panels with
+  terminal header strips; a numbered `01/04` pipeline; dense mono footer.
 - **Projects** — cards became instrument panels: a header strip with the
   mono project ID and an uppercase status chip, then name, description, and
   a cyan mono metric readout with sparkline.

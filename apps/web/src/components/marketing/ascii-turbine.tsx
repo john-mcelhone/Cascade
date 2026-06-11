@@ -5,19 +5,21 @@ import { useEffect, useRef } from "react";
 /**
  * AsciiTurbine — an animated ASCII radial-inflow rotor, face-on.
  *
- * Nine log-spiral blades sweep between hub and shroud on a canvas
- * character grid: glyph weight from blade intensity (· : + = * # % @),
- * brand-cyan blades over a faint dot fabric, a shroud ring, and a hub.
- * The wheel idles at a slow visual rpm and spins up while hovered.
- * Honors prefers-reduced-motion (static frame), pauses off-screen,
- * theme-aware via tokens. Pure decoration: aria-hidden.
+ * Seven log-spiral blades sweep between hub and shroud on a canvas
+ * character grid, each arm shaded as a solid ribbon (bright leading edge
+ * → core → trail) in brand cyan. Built as background art: chunky cells,
+ * no interactivity, and a very slow constant spin (set `speed` in rad/s).
+ * Dim it with a wrapper opacity. Honors prefers-reduced-motion (static
+ * frame), pauses off-screen, theme-aware via tokens. Pure decoration.
  */
 export function AsciiTurbine({
   className,
-  height = 224,
+  height = 720,
+  speed = 0.08,
 }: {
   className?: string;
   height?: number;
+  speed?: number;
 }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -33,15 +35,17 @@ export function AsciiTurbine({
       "(prefers-reduced-motion: reduce)",
     ).matches;
 
-    const CW = 6; // cell width
-    const CH = 8; // cell height
-    const BLADES = 7;
+    const CW = 8; // cell width
+    const CH = 11; // cell height
+    const BLADES = 5;
     const CURVE = 0.9; // log-spiral blade curvature (~70° wrap hub→tip)
+    const TH = 13; // blade half-thickness (px), constant along the arm
+    const TAU = Math.PI * 2;
+    const GRAD = Math.sqrt(1 + CURVE * CURVE);
 
     let w = 0;
     const h = height;
     let dpr = 1;
-    let hovered = false;
 
     const LEVELS = 14;
     let lutDim: string[] = [];
@@ -71,28 +75,19 @@ export function AsciiTurbine({
     function resize() {
       const rect = wrap!.getBoundingClientRect();
       w = rect.width;
-      dpr = Math.min(window.devicePixelRatio || 1, 2);
+      dpr = Math.min(window.devicePixelRatio || 1, 1.5);
       canvas!.width = Math.round(w * dpr);
       canvas!.height = Math.round(h * dpr);
       canvas!.style.width = `${w}px`;
       canvas!.style.height = `${h}px`;
       ctx!.setTransform(dpr, 0, 0, dpr, 0, 0);
-      ctx!.font = '8px "JetBrains Mono", ui-monospace, monospace';
+      ctx!.font = '9px "JetBrains Mono", ui-monospace, monospace';
       ctx!.textAlign = "center";
       ctx!.textBaseline = "middle";
     }
     resize();
     const ro = new ResizeObserver(resize);
     ro.observe(wrap);
-
-    const onEnter = () => {
-      hovered = true;
-    };
-    const onLeave = () => {
-      hovered = false;
-    };
-    wrap.addEventListener("pointerenter", onEnter);
-    wrap.addEventListener("pointerleave", onLeave);
 
     let visible = true;
     const io = new IntersectionObserver(
@@ -103,26 +98,15 @@ export function AsciiTurbine({
     );
     io.observe(wrap);
 
-    let spin = 0; // accumulated rotor angle
-    let omega = 0.7; // current angular velocity (rad/s, visual)
-    let lastT = 0;
-
     function frame(tMs: number) {
-      const t = tMs / 1000;
-      const dt = Math.min(t - lastT || 0.033, 0.1);
-      lastT = t;
-
-      // Idle slowly; spool up under the pointer.
-      const target = hovered ? 2.6 : 0.4;
-      omega += (target - omega) * 0.04;
-      spin += omega * dt;
+      const spin = (tMs / 1000) * speed;
 
       ctx!.clearRect(0, 0, w, h);
 
       const cx = w / 2;
       const cy = h / 2;
-      const rTip = Math.min(w, h) / 2 - 10;
-      const rHub = Math.max(16, rTip * 0.22);
+      const rTip = Math.min(w, h) / 2 - 12;
+      const rHub = Math.max(20, rTip * 0.22);
       const cols = Math.ceil(w / CW);
       const rows = Math.ceil(h / CH);
 
@@ -134,10 +118,10 @@ export function AsciiTurbine({
           const dy = y - cy;
           const r = Math.hypot(dx, dy);
 
-          if (r > rTip + 6) continue;
+          if (r > rTip + 8) continue;
 
           // Shroud ring — a solid circular casing.
-          if (Math.abs(r - rTip) < 4.5) {
+          if (Math.abs(r - rTip) < 6) {
             ctx!.fillStyle = lutMid[6];
             ctx!.fillText("o", x, y);
             continue;
@@ -150,22 +134,23 @@ export function AsciiTurbine({
           }
           if (r > rTip) continue;
 
-          // Log-spiral blade field, rotating at omega.
+          // Log-spiral blade field, rotating slowly. Arms are drawn at a
+          // constant spatial thickness (signed distance to the blade
+          // centerline) so they read as clean ribbons at mural scale.
           const theta = Math.atan2(dy, dx);
-          const phase =
-            BLADES * (theta - spin + CURVE * Math.log(r / rHub));
-          const b = Math.cos(phase);
+          const phase = BLADES * (theta - spin + CURVE * Math.log(r / rHub));
+          const m = ((phase % TAU) + TAU) % TAU;
+          const sgn = m < Math.PI ? m : m - TAU;
+          const dist = (Math.abs(sgn) / BLADES) * (r / GRAD);
 
-          // Flow passage between blades stays empty — contrast is clarity.
-          if (b < 0.2) continue;
+          // Taper thickness toward the root so the passages stay open.
+          const th = TH * Math.min(1, (r - rHub) / (rHub * 0.9) + 0.25);
+          if (dist > th) continue;
 
-          // Shade by position within the blade so each arm renders as a
-          // solid ribbon: bright leading edge, solid core, soft trail.
-          const p = (b - 0.2) / 0.8;
-          const glyph = p > 0.72 ? "@" : p > 0.4 ? "#" : p > 0.18 ? "=" : ":";
-          const level = Math.min(LEVELS, 7 + Math.round(p * 7));
-          ctx!.fillStyle = lutHot[level];
-          ctx!.fillText(glyph, x, y);
+          // Bright leading edge along one side of each arm.
+          const edge = sgn > 0 && dist > th * 0.55;
+          ctx!.fillStyle = lutHot[edge ? 13 : 8];
+          ctx!.fillText(edge ? "@" : "#", x, y);
         }
       }
     }
@@ -175,7 +160,8 @@ export function AsciiTurbine({
     function loop(tMs: number) {
       raf = requestAnimationFrame(loop);
       if (!visible) return;
-      if (tMs - last < 33) return; // ~30 fps
+      // A slow wheel doesn't need fast frames.
+      if (tMs - last < 66) return; // ~15 fps
       last = tMs;
       frame(tMs);
     }
@@ -191,10 +177,8 @@ export function AsciiTurbine({
       ro.disconnect();
       io.disconnect();
       themeWatch.disconnect();
-      wrap.removeEventListener("pointerenter", onEnter);
-      wrap.removeEventListener("pointerleave", onLeave);
     };
-  }, [height]);
+  }, [height, speed]);
 
   return (
     <div ref={wrapRef} aria-hidden className={className}>
