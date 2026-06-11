@@ -13,7 +13,6 @@ import {
 } from "lucide-react";
 import { Logo, CascadeMark } from "@/components/shell/logo";
 import { Button } from "@/components/ui/button";
-import { AsciiWindTunnel } from "@/components/marketing/ascii-wind-tunnel";
 import { AsciiTurbine } from "@/components/marketing/ascii-turbine";
 
 /**
@@ -58,89 +57,77 @@ export default function Home() {
       <main className="flex flex-1 flex-col">
         {/* ───────────────────────── Hero ───────────────────────── */}
         {/* `isolate` gives the section its own stacking context so the
-            -z-10 canvas paints above the page background, below content. */}
+            -z-10 mural paints above the page background, below content. */}
         <section className="relative isolate overflow-hidden border-b border-border-subtle">
-          {/* Live ASCII wind tunnel — potential flow around your cursor. */}
-          <AsciiWindTunnel className="absolute inset-0 -z-10 [mask-image:linear-gradient(to_bottom,black_82%,transparent)]" />
+          {/* ASCII rotor mural — the whole wheel, faint, turning very slowly. */}
+          <AsciiTurbine
+            height={620}
+            className="absolute right-[4%] top-1/2 -z-10 hidden w-[620px] -translate-y-1/2 opacity-[0.3] md:block"
+          />
 
-          {/* Wind-tunnel placard — invites play, bottom-left like a test-cell tag. */}
-          <div
-            aria-hidden
-            className="pointer-events-none absolute bottom-3 left-5 hidden items-center gap-2 lg:flex"
-          >
-            <span className="led led-pulse bg-accent" />
-            <span className="micro-label">
-              Wind tunnel · potential flow · move cursor — hold to add circulation
-            </span>
-          </div>
-
-          <div className="relative mx-auto w-full max-w-6xl px-5 py-14 sm:py-20">
-            <div className="grid items-center gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,28rem)]">
-              <div className="flex flex-col gap-6">
-                <div className="animate-fade-in-up inline-flex items-center gap-3">
-                  <span className="inline-flex items-center gap-2 rounded-sm border border-border-subtle bg-surface px-2.5 py-1">
-                    <span
-                      className="led led-pulse bg-semantic-success"
-                      aria-hidden
-                    />
-                    <span className="micro-label !text-text-subtle">
-                      v0.1.0 — Validation public
-                    </span>
+          <div className="relative mx-auto w-full max-w-6xl px-5 py-16 sm:py-24">
+            <div className="flex max-w-2xl flex-col gap-6">
+              <div className="animate-fade-in-up inline-flex items-center gap-3">
+                <span className="inline-flex items-center gap-2 rounded-sm border border-border-subtle bg-surface px-2.5 py-1">
+                  <span
+                    className="led led-pulse bg-semantic-success"
+                    aria-hidden
+                  />
+                  <span className="micro-label !text-text-subtle">
+                    v0.1.0 — Validation public
                   </span>
-                  <Link
-                    href="/docs/validation"
-                    className="micro-label hidden underline-offset-4 hover:text-text hover:underline sm:block"
-                  >
-                    Read the report
-                  </Link>
-                </div>
-
-                <h1
-                  className="animate-fade-in-up max-w-2xl font-display text-[40px] font-medium leading-[1.06] tracking-[-0.015em] sm:text-[52px]"
-                  style={{ animationDelay: "60ms" }}
+                </span>
+                <Link
+                  href="/docs/validation"
+                  className="micro-label hidden underline-offset-4 hover:text-text hover:underline sm:block"
                 >
-                  Turbomachinery design,
-                  <br className="hidden sm:block" />{" "}
-                  <span className="italic text-brand">in the open.</span>
-                </h1>
-
-                <p
-                  className="animate-fade-in-up max-w-xl text-md leading-relaxed text-text-muted"
-                  style={{ animationDelay: "120ms" }}
-                >
-                  Build a cycle. Run a meanline. Sweep thousands of candidate
-                  geometries against your constraints. Pick one. Ship it —
-                  every loss model cited, every project a folder of text
-                  files, every run reproducible.
-                </p>
-
-                <div
-                  className="animate-fade-in-up flex flex-wrap items-center gap-3 pt-1"
-                  style={{ animationDelay: "180ms" }}
-                >
-                  <Link href="/projects">
-                    <Button size="xl" className="gap-2">
-                      Open the workspace
-                      <ArrowRight className="h-4 w-4" />
-                    </Button>
-                  </Link>
-                  <Link href="/learn">
-                    <Button size="xl" variant="outline" className="gap-2">
-                      <GraduationCap className="h-4 w-4" />
-                      Start with Learn
-                    </Button>
-                  </Link>
-                </div>
-
-                <p
-                  className="animate-fade-in-up text-sm text-text-muted"
-                  style={{ animationDelay: "220ms" }}
-                >
-                  First radial-turbine sweep in about four minutes.
-                </p>
+                  Read the report
+                </Link>
               </div>
 
-              <SolverConsole />
+              <h1
+                className="animate-fade-in-up font-display text-[44px] font-medium leading-[1.06] tracking-[-0.015em] sm:text-[60px]"
+                style={{ animationDelay: "60ms" }}
+              >
+                Turbomachinery design,
+                <br className="hidden sm:block" />{" "}
+                <span className="italic text-brand">in the open.</span>
+              </h1>
+
+              <p
+                className="animate-fade-in-up max-w-xl text-md leading-relaxed text-text-muted sm:text-lg"
+                style={{ animationDelay: "120ms" }}
+              >
+                Build a cycle. Run a meanline. Sweep thousands of candidate
+                geometries against your constraints. Pick one. Ship it — every
+                loss model cited, every project a folder of text files, every
+                run reproducible.
+              </p>
+
+              <div
+                className="animate-fade-in-up flex flex-wrap items-center gap-3 pt-1"
+                style={{ animationDelay: "180ms" }}
+              >
+                <Link href="/projects">
+                  <Button size="xl" className="gap-2">
+                    Open the workspace
+                    <ArrowRight className="h-4 w-4" />
+                  </Button>
+                </Link>
+                <Link href="/learn">
+                  <Button size="xl" variant="outline" className="gap-2">
+                    <GraduationCap className="h-4 w-4" />
+                    Start with Learn
+                  </Button>
+                </Link>
+              </div>
+
+              <p
+                className="animate-fade-in-up text-sm text-text-muted"
+                style={{ animationDelay: "220ms" }}
+              >
+                First radial-turbine sweep in about four minutes.
+              </p>
             </div>
 
             {/* Spec readout — hairline-segmented instrument strip. */}
@@ -290,69 +277,6 @@ export default function Home() {
           </div>
         </footer>
       </main>
-    </div>
-  );
-}
-
-/**
- * Decorative boot-screen console for the hero. The centerpiece is a live
- * spinning ASCII radial-inflow rotor (hover to spool it up); below it, a
- * short solver session with real vocabulary. Numbers mirror the demo
- * project. Static markup + canvas; no functionality.
- */
-function SolverConsole() {
-  return (
-    <div
-      className="animate-fade-in-up hidden overflow-hidden rounded-sm border border-border-subtle bg-surface shadow-z2 md:block"
-      style={{ animationDelay: "150ms" }}
-      aria-hidden
-    >
-      <div className="flex items-center justify-between border-b border-border-subtle bg-surface-subtle px-3 py-1.5">
-        <span className="micro-label">Solver console</span>
-        <span className="flex items-center gap-2">
-          <span className="led led-pulse bg-semantic-success" />
-          <span className="font-mono text-[10px] text-text-muted">
-            tty1 · local
-          </span>
-        </span>
-      </div>
-
-      {/* Spinning ASCII rotor — hover to spool up. */}
-      <AsciiTurbine height={216} className="border-b border-border-subtle/60" />
-      <div className="flex items-center justify-between px-4 py-1.5">
-        <span className="font-mono text-[10px] text-text-muted">
-          radial-inflow rotor · 7 blades · N 96 000 rpm
-        </span>
-        <span className="micro-label !text-brand-text">hover to spool up</span>
-      </div>
-
-      <div className="select-none overflow-x-auto border-t border-border-subtle/60 p-4 pt-3 scrollbar-subtle">
-        <pre className="font-mono text-[11px] leading-[17px]">
-          <span className="text-brand">{"› "}</span>
-          <span className="text-text">{"cascade solve cycle microturbine-30kw"}</span>
-          {"\n"}
-          <span className="text-text-muted">{"  iter 12 · residual 3.2e-09   "}</span>
-          <span className="text-accent">{"█▇▅▃▂▁"}</span>
-          {"\n"}
-          <span className="text-semantic-success">{"  ✓ converged 182 ms"}</span>
-          <span className="text-text-muted">{" · η_e 0.274 · w_net 30.2 kW"}</span>
-          {"\n\n"}
-          <span className="text-brand">{"› "}</span>
-          <span className="text-text">{"cascade sweep --candidates 2000 --seed 42"}</span>
-          {"\n"}
-          <span className="text-semantic-success">{"  ✓ 1 847 solved"}</span>
-          <span className="text-text-muted">{" · 219 valid · best η_tt 0.881"}</span>
-          {"\n\n"}
-          <span className="text-brand">{"› "}</span>
-          <span className="text-text">{"cascade map --speedlines 5"}</span>
-          {"\n"}
-          <span className="text-semantic-success">{"  ✓ 45 points"}</span>
-          <span className="text-text-muted">{" · surge & choke explicit · 0 ambiguous codes"}</span>
-          {"\n\n"}
-          <span className="text-brand">{"› "}</span>
-          <span className="animate-led-pulse text-accent">{"█"}</span>
-        </pre>
-      </div>
     </div>
   );
 }
