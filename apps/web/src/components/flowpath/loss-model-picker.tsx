@@ -166,7 +166,7 @@ function DetailsDialog({ model, lossScales, setLossScale }: DetailsDialogProps) 
                     key={key}
                     className="rounded-sm border border-border-subtle bg-surface-subtle/40 px-2 py-1"
                   >
-                    <div className="text-[10px] uppercase tracking-wide text-text-muted">
+                    <div className="text-[11px] text-text-muted">
                       {key}
                     </div>
                     <div className="tabular-nums text-text">
@@ -228,7 +228,7 @@ function DetailsDialog({ model, lossScales, setLossScale }: DetailsDialogProps) 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section>
-      <h3 className="mb-1 flex items-center gap-1 text-xs font-medium uppercase tracking-wide text-text-muted">
+      <h3 className="mb-1 flex items-center gap-1 text-xs font-medium text-text-muted">
         <ChevronRight className="h-3 w-3" /> {title}
       </h3>
       {children}

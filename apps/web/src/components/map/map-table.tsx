@@ -109,7 +109,7 @@ export function MapTable({ points }: MapTableProps) {
     <div className="overflow-hidden rounded-md border border-border-subtle">
       <div className="max-h-[420px] overflow-auto scrollbar-subtle">
         <table className="w-full text-sm">
-          <thead className="sticky top-0 border-b border-border-subtle bg-surface-subtle text-xs uppercase tracking-wide text-text-muted">
+          <thead className="sticky top-0 border-b border-border-subtle bg-surface-subtle text-xs text-text-muted">
             {table.getHeaderGroups().map((hg) => (
               <tr key={hg.id}>
                 {hg.headers.map((h) => {

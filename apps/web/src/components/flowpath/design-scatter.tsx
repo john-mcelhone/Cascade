@@ -363,7 +363,7 @@ function ParallelCoordinatesDisclosure({
       >
         <span className="inline-flex items-center gap-1.5">
           <span aria-hidden>{open ? "▾" : "▸"}</span>
-          <span className="uppercase tracking-wide">Parallel coordinates</span>
+          <span>Parallel coordinates</span>
           <span className="text-text-subtle">
             ({valid.length} {valid.length === 1 ? "candidate" : "candidates"})
           </span>
@@ -634,7 +634,7 @@ function BestCard({
   return (
     <Card className="p-2 text-xs">
       <div className="mb-1 flex items-center justify-between">
-        <span className="uppercase tracking-wide text-text-muted">{label}</span>
+        <span className="text-text-muted">{label}</span>
         <Badge variant={variant}>{candidate ? "ok" : "—"}</Badge>
       </div>
       <div className="font-mono text-text">

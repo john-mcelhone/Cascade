@@ -101,7 +101,7 @@ export function RotorSketch({
         const isSelected = b.id === selectedBearingId;
         const fill = isSelected
           ? "rgb(var(--brand-default))"
-          : "rgb(var(--semantic-warning-default))";
+          : "rgb(var(--warning-default))";
         return (
           <g
             key={b.id}

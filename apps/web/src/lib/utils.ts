@@ -30,3 +30,15 @@ export function fmtNumber(
   }
   return value.toFixed(3).replace(/\.?0+$/, "");
 }
+
+/** Display label for a project working fluid ("co2" → "CO₂"). */
+export function fluidLabel(fluid: string): string {
+  const labels: Record<string, string> = {
+    air: "Air",
+    co2: "CO₂",
+    n2: "N₂",
+    h2: "H₂",
+    methane: "Methane",
+  };
+  return labels[fluid] ?? fluid;
+}

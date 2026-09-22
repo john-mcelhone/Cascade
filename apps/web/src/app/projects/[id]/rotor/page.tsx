@@ -248,7 +248,7 @@ export default function RotorPage({ params }: PageProps) {
           <div className="basis-3/5 overflow-auto scrollbar-subtle p-5">
             <Card className="p-3">
               <div className="mb-2 flex items-baseline justify-between">
-                <h3 className="text-xs font-medium uppercase tracking-wide text-text-muted">
+                <h3 className="text-xs font-medium text-text-muted">
                   Rotor sketch
                 </h3>
                 <span className="text-xs text-text-muted">
@@ -369,7 +369,7 @@ export default function RotorPage({ params }: PageProps) {
         <RightRail width={320}>
           <div className="flex flex-col gap-5 p-4">
             <section>
-              <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-text-muted">
+              <h3 className="mb-2 text-xs font-medium text-text-muted">
                 Bearing properties
               </h3>
               {selectedBearing ? (
@@ -403,7 +403,7 @@ export default function RotorPage({ params }: PageProps) {
               )}
             </section>
             <section>
-              <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-text-muted">
+              <h3 className="mb-2 text-xs font-medium text-text-muted">
                 Run controls
               </h3>
               <div className="rounded-md border border-border-subtle bg-surface px-3 py-2 text-xs">
@@ -438,7 +438,7 @@ export default function RotorPage({ params }: PageProps) {
             </section>
             {modes.length > 0 && (
               <section>
-                <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-text-muted">
+                <h3 className="mb-2 text-xs font-medium text-text-muted">
                   Modes
                 </h3>
                 <ul className="flex flex-col gap-0.5 text-xs">
@@ -468,7 +468,7 @@ export default function RotorPage({ params }: PageProps) {
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-sm border border-border-subtle bg-surface px-2 py-1.5">
-      <div className="text-[10px] uppercase tracking-wide text-text-muted">
+      <div className="text-[11px] text-text-muted">
         {label}
       </div>
       <div className="font-mono tabular-nums text-sm">{value}</div>
@@ -565,7 +565,7 @@ function SpeedField({
 }) {
   return (
     <label className="flex flex-col gap-0.5 text-xs">
-      <span className="uppercase tracking-wide text-text-muted">{label}</span>
+      <span className="text-text-muted">{label}</span>
       <input
         type="number"
         className="h-7 rounded-sm border border-border-default bg-surface-input px-2 text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-border-focus"

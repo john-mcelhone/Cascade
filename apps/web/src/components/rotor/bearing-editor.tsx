@@ -375,7 +375,7 @@ function TabulatedTab({ bearing, onChange }: BearingEditorProps) {
       </p>
       <div className="overflow-x-auto rounded-sm border border-border-subtle">
         <table className="w-full text-[11px] tabular-nums">
-          <thead className="bg-surface-subtle text-[10px] uppercase tracking-wide text-text-muted">
+          <thead className="bg-surface-subtle text-[11px] text-text-muted">
             {table.getHeaderGroups().map((hg) => (
               <tr key={hg.id}>
                 {hg.headers.map((h) => (
@@ -452,7 +452,7 @@ interface NumericFieldProps extends Omit<RegisterReturn, "ref"> {
 const NumericField = ({ label, tip, error, ...rest }: NumericFieldProps) => {
   return (
     <label className="flex flex-col gap-0.5">
-      <span className="flex items-baseline justify-between text-[10px] uppercase tracking-wide text-text-muted">
+      <span className="flex items-baseline justify-between text-[11px] text-text-muted">
         <span>{label}</span>
         {tip && (
           <Tooltip>

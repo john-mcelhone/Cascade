@@ -56,14 +56,14 @@ def _microturbine_project() -> Dict[str, Any]:
             "id": "inlet_loss",
             "kind": "ConstantPressureLoss",
             "name": "Inlet duct",
-            "position": {"x": 200, "y": 240},
+            "position": {"x": 260, "y": 240},
             "params": {"pressure_drop_fraction": c.pdrop_inlet},
         },
         {
             "id": "compressor",
             "kind": "Compressor",
             "name": "C1",
-            "position": {"x": 360, "y": 240},
+            "position": {"x": 480, "y": 240},
             "params": {
                 "pressure_ratio": c.pressure_ratio,
                 "efficiency_isentropic": c.eta_compressor_isen,
@@ -73,7 +73,7 @@ def _microturbine_project() -> Dict[str, Any]:
             "id": "recuperator",
             "kind": "Recuperator",
             "name": "R1",
-            "position": {"x": 520, "y": 320},
+            "position": {"x": 700, "y": 380},
             "params": {
                 "effectiveness": c.recuperator_effectiveness,
                 "cold_pressure_drop_fraction": c.pdrop_recup_cold,
@@ -84,7 +84,7 @@ def _microturbine_project() -> Dict[str, Any]:
             "id": "burner",
             "kind": "Burner",
             "name": "B1",
-            "position": {"x": 680, "y": 240},
+            "position": {"x": 920, "y": 240},
             "params": {
                 "outlet_temperature": {"value": TIT_K, "unit": "K"},
                 "pressure_drop_fraction": c.pdrop_burner,
@@ -99,7 +99,7 @@ def _microturbine_project() -> Dict[str, Any]:
             "id": "turbine",
             "kind": "Turbine",
             "name": "T1",
-            "position": {"x": 840, "y": 240},
+            "position": {"x": 1140, "y": 240},
             "params": {
                 "pressure_ratio": c.turbine_pressure_ratio(),
                 "efficiency_isentropic": c.eta_turbine_isen,
@@ -109,7 +109,7 @@ def _microturbine_project() -> Dict[str, Any]:
             "id": "outlet",
             "kind": "Outlet",
             "name": "Exhaust",
-            "position": {"x": 1000, "y": 240},
+            "position": {"x": 1360, "y": 240},
             "params": {},
         },
     ]
@@ -218,14 +218,14 @@ def _sco2_project() -> Dict[str, Any]:
             "id": "compressor",
             "kind": "Compressor",
             "name": "C1",
-            "position": {"x": 240, "y": 240},
+            "position": {"x": 280, "y": 240},
             "params": {"pressure_ratio": 3.0, "efficiency_isentropic": 0.83},
         },
         {
             "id": "burner",
             "kind": "Burner",
             "name": "Heater",
-            "position": {"x": 440, "y": 240},
+            "position": {"x": 520, "y": 240},
             "params": {
                 "outlet_temperature": {"value": 873.0, "unit": "K"},
                 "pressure_drop_fraction": 0.02,
@@ -237,14 +237,14 @@ def _sco2_project() -> Dict[str, Any]:
             "id": "turbine",
             "kind": "Turbine",
             "name": "T1",
-            "position": {"x": 640, "y": 240},
+            "position": {"x": 760, "y": 240},
             "params": {"pressure_ratio": 2.9, "efficiency_isentropic": 0.88},
         },
         {
             "id": "outlet",
             "kind": "Outlet",
             "name": "Exhaust",
-            "position": {"x": 840, "y": 240},
+            "position": {"x": 1000, "y": 240},
             "params": {},
         },
     ]
@@ -355,14 +355,14 @@ def _at100_project() -> Dict[str, Any]:
             "id": "inlet_loss",
             "kind": "ConstantPressureLoss",
             "name": "Inlet duct",
-            "position": {"x": 200, "y": 240},
+            "position": {"x": 260, "y": 240},
             "params": {"pressure_drop_fraction": inlet_pdrop},
         },
         {
             "id": "compressor",
             "kind": "Compressor",
             "name": "C1",
-            "position": {"x": 360, "y": 240},
+            "position": {"x": 480, "y": 240},
             "params": {
                 "pressure_ratio": pressure_ratio,
                 "efficiency_isentropic": eta_c_isen,
@@ -372,7 +372,7 @@ def _at100_project() -> Dict[str, Any]:
             "id": "recuperator",
             "kind": "Recuperator",
             "name": "R1",
-            "position": {"x": 520, "y": 320},
+            "position": {"x": 700, "y": 380},
             "params": {
                 "effectiveness": recup_eff,
                 "cold_pressure_drop_fraction": recup_pdrop_cold,
@@ -383,7 +383,7 @@ def _at100_project() -> Dict[str, Any]:
             "id": "burner",
             "kind": "Burner",
             "name": "Combustor",
-            "position": {"x": 680, "y": 240},
+            "position": {"x": 920, "y": 240},
             "params": {
                 "outlet_temperature": {"value": TIT_K, "unit": "K"},
                 "pressure_drop_fraction": BURNER_PDROP,
@@ -398,7 +398,7 @@ def _at100_project() -> Dict[str, Any]:
             "id": "turbine",
             "kind": "Turbine",
             "name": "T1",
-            "position": {"x": 840, "y": 240},
+            "position": {"x": 1140, "y": 240},
             "params": {
                 "pressure_ratio": pressure_ratio_t,
                 "efficiency_isentropic": eta_t_isen,
@@ -408,7 +408,7 @@ def _at100_project() -> Dict[str, Any]:
             "id": "outlet",
             "kind": "Outlet",
             "name": "Exhaust",
-            "position": {"x": 1000, "y": 240},
+            "position": {"x": 1360, "y": 240},
             "params": {},
         },
     ]

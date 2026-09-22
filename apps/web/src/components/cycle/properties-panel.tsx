@@ -226,7 +226,7 @@ export function PropertiesPanel({
   return (
     <aside className="flex w-[320px] shrink-0 flex-col overflow-hidden border-l border-border-subtle bg-surface-subtle/40">
       <div className="border-b border-border-subtle px-3 py-2.5">
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-text-muted">
+        <h2 className="text-xs font-semibold text-text-muted">
           {node ? "Component" : "Project"}
         </h2>
         <p className="mt-0.5 text-sm text-text">
@@ -308,7 +308,7 @@ function ProjectForm({
       </section>
 
       <section className="flex flex-col gap-2">
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-text-muted">
+        <h3 className="text-xs font-semibold text-text-muted">
           Ambient
         </h3>
         <FieldRow label="Pt" symbol="ambient pressure">
@@ -1835,7 +1835,7 @@ function FormSection({
         <button
           type="button"
           onClick={onToggle}
-          className="-mx-1 flex items-center gap-1 rounded-sm px-1 py-0.5 text-left text-xs font-semibold uppercase tracking-wide text-text-muted hover:bg-surface-subtle/60"
+          className="-mx-1 flex items-center gap-1 rounded-sm px-1 py-0.5 text-left text-xs font-semibold text-text-muted hover:bg-surface-subtle/60"
         >
           {open ? (
             <ChevronDown className="h-3 w-3" />
@@ -1845,7 +1845,7 @@ function FormSection({
           {title}
         </button>
       ) : (
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-text-muted">
+        <h3 className="text-xs font-semibold text-text-muted">
           {title}
         </h3>
       )}
@@ -2145,7 +2145,7 @@ function FieldLabel({
           <TooltipTrigger asChild>
             <Badge
               variant="outline"
-              className="border-semantic-warning/40 bg-semantic-warning-surface/40 px-1 py-0 text-[9px] uppercase tracking-wide text-semantic-warning-text"
+              className="border-semantic-warning/40 bg-semantic-warning-surface/40 px-1 py-0 text-[10px] text-semantic-warning-text"
             >
               preview
             </Badge>

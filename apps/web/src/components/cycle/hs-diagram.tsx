@@ -124,7 +124,7 @@ export function HsDiagram({ dark, className }: HsDiagramProps) {
       <div className="flex items-center justify-between px-3 py-1.5">
         <button
           type="button"
-          className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-text-muted hover:text-text"
+          className="flex items-center gap-1.5 text-xs font-medium text-text-muted hover:text-text"
           onClick={() => setOpen(!open)}
           aria-expanded={open}
         >

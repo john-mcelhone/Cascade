@@ -5,88 +5,89 @@
 /*
  * Cascade design tokens, expressed as CSS variables.
  *
- * v0.3 "Console" design language — an instrument-grade, information-dense
- * aesthetic in the lineage of professional terminals (think Bloomberg, flight
- * decks, mission control) without the monospace-everywhere cliché:
+ * v0.4 "Workbench" — the layout and restraint of a professional desktop
+ * tool (Blender, Figma, an IDE) rather than a web dashboard:
  *
- *   - Dark-first. The default theme is a deep blue-black console; light mode
- *     is a crisp "blueprint paper" companion for daylight and print.
- *   - Hairline panels instead of soft shadows. Depth comes from layered
- *     surface values and 1px borders, not blur or glow.
- *   - 2–4 px radii. Sharp, machined corners.
- *   - Cyan is the working accent (interactive, selected); amber is the live
- *     accent (running jobs, attention). Green/red stay strictly semantic.
- *   - Inter for prose and controls; mono is reserved for data — values, IDs,
- *     timestamps, keyboard hints.
+ *   - Workspaces, not pages. Modules are tabs in the top bar; the whole
+ *     window below belongs to the work. No navigation sidebar.
+ *   - Editors with headers. Every pane opens with a slim header strip
+ *     (title + tools) and collapsible sections, so dense screens stay
+ *     scannable.
+ *   - Neutral graphite surfaces (dark default) or paper (light). Color is
+ *     reserved for data, selection (cyan), live state (amber) and status
+ *     (green/red).
+ *   - Quiet type. Sentence-case labels, one weight step between levels,
+ *     mono only for values, IDs and keyboard hints.
+ *   - Soft-machined corners: 4 px controls, 6-8 px panels.
  *
  * Color variables are R G B triplets (no commas) so Tailwind's
  * `rgb(var(--foo) / <alpha>)` notation works for every utility.
  *
  * tokens.json holds the v0.1 semantic baseline; this file is canonical for
- * the v0.3 visual language.
+ * the current visual language.
  */
 
 @layer base {
   :root {
-    /* App backgrounds — "blueprint paper" light theme */
-    --background: 246 247 249;             /* #F6F7F9 cool paper */
-    --surface-default: 255 255 255;        /* #FFFFFF */
-    --surface-subtle: 236 238 241;         /* #ECEEF1 */
-    --surface-raised: 255 255 255;         /* #FFFFFF */
-    --surface-input: 255 252 235;          /* #FFFCEB — yellow input convention */
-    --surface-computed: 247 247 248;       /* #F7F7F8 */
+    /* App backgrounds — "Paper" light theme: neutral, near-white. */
+    --background: 243 244 246;             /* #F3F4F6 area behind editors */
+    --surface-default: 255 255 255;        /* #FFFFFF editor panels */
+    --surface-subtle: 247 248 249;         /* #F7F8F9 recessed wells */
+    --surface-raised: 255 255 255;         /* #FFFFFF cards, popovers */
+    --surface-input: 255 251 232;          /* #FFFBE8 — yellow input convention */
+    --surface-computed: 244 245 247;       /* #F4F5F7 */
 
     /* Text */
-    --text-default: 23 28 36;              /* #171C24 */
-    --text-muted: 110 119 132;             /* #6E7784 */
-    --text-subtle: 71 79 92;               /* #474F5C */
-    --text-disabled: 184 190 199;          /* #B8BEC7 */
+    --text-default: 24 26 31;              /* #181A1F */
+    --text-muted: 107 113 124;             /* #6B717C */
+    --text-subtle: 64 69 79;               /* #40454F */
+    --text-disabled: 176 181 189;          /* #B0B5BD */
     --text-inverse: 255 255 255;           /* #FFFFFF */
     --text-bound: 122 61 168;              /* #7A3DA8 — bound parameter violet */
 
     /* Borders */
-    --border-subtle: 218 222 228;          /* #DADEE4 */
-    --border-default: 186 192 201;         /* #BAC0C9 */
-    --border-strong: 110 119 132;          /* #6E7784 */
-    --border-focus: 14 116 144;            /* #0E7490 — working cyan */
+    --border-subtle: 229 231 235;          /* #E5E7EB */
+    --border-default: 209 213 219;         /* #D1D5DB */
+    --border-strong: 156 163 175;          /* #9CA3AF */
+    --border-focus: 14 128 158;            /* #0E809E */
 
     /* Brand — working cyan-teal */
-    --brand-default: 14 116 144;           /* #0E7490 */
-    --brand-hover: 8 145 178;              /* #0891B2 */
-    --brand-pressed: 21 94 117;            /* #155E75 */
-    --brand-surface: 224 242 247;          /* #E0F2F7 */
-    --brand-text: 21 94 117;               /* #155E75 */
+    --brand-default: 14 128 158;           /* #0E809E */
+    --brand-hover: 12 113 140;             /* #0C718C */
+    --brand-pressed: 10 96 119;            /* #0A6077 */
+    --brand-surface: 230 244 248;          /* #E6F4F8 */
+    --brand-text: 11 98 122;               /* #0B627A */
     --brand-accent: 8 145 178;             /* companion hue (legacy alias) */
-    --brand-glow: 14 116 144;
+    --brand-glow: 14 128 158;
 
     /* Accent — instrument amber: live / running / attention */
-    --accent-default: 158 102 0;           /* #9E6600 */
-    --accent-surface: 251 240 219;         /* #FBF0DB */
-    --accent-border: 209 162 89;           /* #D1A259 */
+    --accent-default: 176 110 0;           /* #B06E00 */
+    --accent-surface: 252 243 224;         /* #FCF3E0 */
+    --accent-border: 222 184 120;          /* #DEB878 */
     --accent-text: 122 76 0;               /* #7A4C00 */
 
     /* Semantic — success */
-    --success-default: 46 135 84;          /* #2E8754 */
-    --success-surface: 229 242 235;        /* #E5F2EB */
-    --success-border: 124 183 146;         /* #7CB792 */
-    --success-text: 31 92 57;              /* #1F5C39 */
+    --success-default: 34 139 84;          /* #228B54 */
+    --success-surface: 232 245 238;        /* #E8F5EE */
+    --success-border: 150 204 172;         /* #96CCAC */
+    --success-text: 24 96 58;              /* #18603A */
 
     /* Semantic — warning */
     --warning-default: 180 113 0;          /* #B47100 */
-    --warning-surface: 251 241 222;        /* #FBF1DE */
-    --warning-border: 213 165 91;          /* #D5A55B */
+    --warning-surface: 252 244 226;        /* #FCF4E2 */
+    --warning-border: 226 190 128;         /* #E2BE80 */
     --warning-text: 124 79 0;              /* #7C4F00 */
 
     /* Semantic — danger */
-    --danger-default: 181 52 46;           /* #B5342E */
-    --danger-surface: 248 229 228;         /* #F8E5E4 */
-    --danger-border: 210 120 113;          /* #D27871 */
-    --danger-text: 126 37 32;              /* #7E2520 */
+    --danger-default: 196 50 44;           /* #C4322C */
+    --danger-surface: 252 235 234;         /* #FCEBEA */
+    --danger-border: 232 160 156;          /* #E8A09C */
+    --danger-text: 140 36 31;              /* #8C241F */
 
     /* Semantic — info */
-    --info-default: 42 93 170;             /* #2A5DAA */
-    --info-surface: 224 234 248;           /* #E0EAF8 */
-    --info-border: 110 151 208;            /* #6E97D0 */
+    --info-default: 45 100 182;            /* #2D64B6 */
+    --info-surface: 234 241 251;           /* #EAF1FB */
+    --info-border: 150 182 228;            /* #96B6E4 */
     --info-text: 31 69 129;                /* #1F4581 */
 
     /* Categorical chart palette (12) — tuned for white plot areas */
@@ -103,70 +104,71 @@
     --chart-11: 72 120 181;                /* #4878B5 denim */
     --chart-12: 126 92 45;                 /* #7E5C2D bronze */
 
-    /* Elevation — crisp and shallow; hairline borders carry most depth. */
-    --shadow-z1: 0 1px 2px rgba(15, 23, 42, 0.06);
-    --shadow-z2: 0 1px 3px rgba(15, 23, 42, 0.08), 0 4px 10px rgba(15, 23, 42, 0.06);
-    --shadow-z3: 0 4px 12px rgba(15, 23, 42, 0.10), 0 12px 28px rgba(15, 23, 42, 0.10);
-    --shadow-z4: 0 8px 20px rgba(15, 23, 42, 0.12), 0 24px 48px rgba(15, 23, 42, 0.14);
+    /* Elevation — soft and shallow; hairline borders carry most depth. */
+    --shadow-z1: 0 1px 2px rgba(16, 18, 24, 0.05);
+    --shadow-z2: 0 1px 2px rgba(16, 18, 24, 0.06), 0 4px 12px rgba(16, 18, 24, 0.06);
+    --shadow-z3: 0 4px 12px rgba(16, 18, 24, 0.08), 0 16px 32px rgba(16, 18, 24, 0.10);
+    --shadow-z4: 0 8px 24px rgba(16, 18, 24, 0.12), 0 24px 56px rgba(16, 18, 24, 0.14);
     /* Legacy alias — focused-element halo, now a flat 1px brand ring. */
     --shadow-glow: 0 0 0 1px rgb(var(--brand-default) / 0.5);
   }
 
   :root[data-theme="dark"] {
-    /* "Console" — the default identity. Deep blue-black, layered panels. */
-    --background: 10 13 18;                /* #0A0D12 */
-    --surface-default: 17 22 31;           /* #11161F */
-    --surface-subtle: 13 17 23;            /* #0D1117 recessed wells */
-    --surface-raised: 26 34 48;            /* #1A2230 */
-    --surface-input: 42 35 14;             /* #2A230E — yellow input convention */
-    --surface-computed: 20 26 37;          /* #141A25 */
+    /* "Graphite" — the default identity. Neutral greys with a whisper of
+     * cool, so data and the single cyan accent carry all the color. */
+    --background: 15 16 18;                /* #0F1012 area behind editors */
+    --surface-default: 23 24 27;           /* #17181B editor panels */
+    --surface-subtle: 18 19 21;            /* #121315 recessed wells */
+    --surface-raised: 30 32 36;            /* #1E2024 cards, popovers */
+    --surface-input: 36 33 24;             /* #242118 — yellow input convention */
+    --surface-computed: 26 27 31;          /* #1A1B1F */
 
-    --text-default: 232 237 244;           /* #E8EDF4 */
-    --text-muted: 148 158 174;             /* #949EAE */
-    --text-subtle: 195 203 216;            /* #C3CBD8 */
-    --text-disabled: 92 102 119;           /* #5C6677 */
-    --text-inverse: 10 13 18;              /* #0A0D12 */
+    --text-default: 231 233 236;           /* #E7E9EC */
+    --text-muted: 139 145 155;             /* #8B919B */
+    --text-subtle: 190 195 202;            /* #BEC3CA */
+    --text-disabled: 88 93 102;            /* #585D66 */
+    --text-inverse: 12 13 15;              /* #0C0D0F */
     --text-bound: 201 169 240;             /* #C9A9F0 */
 
-    --border-subtle: 33 42 56;             /* #212A38 */
-    --border-default: 51 63 82;            /* #333F52 */
-    --border-strong: 96 112 136;           /* #607088 */
-    --border-focus: 78 199 216;            /* #4EC7D8 */
+    --border-subtle: 38 40 45;             /* #26282D */
+    --border-default: 52 55 62;            /* #34373E */
+    --border-strong: 82 87 96;             /* #525760 */
+    --border-focus: 86 190 214;            /* #56BED6 */
 
-    /* Brand — electric cyan against the console black */
-    --brand-default: 78 199 216;           /* #4EC7D8 */
-    --brand-hover: 116 217 231;            /* #74D9E7 */
-    --brand-pressed: 51 163 180;           /* #33A3B4 */
-    --brand-surface: 17 44 53;             /* #112C35 */
-    --brand-text: 137 222 235;             /* #89DEEB */
-    --brand-accent: 78 199 216;
-    --brand-glow: 78 199 216;
+    /* Brand — calm cyan against graphite */
+    --brand-default: 86 190 214;           /* #56BED6 */
+    --brand-hover: 120 207 227;            /* #78CFE3 */
+    --brand-pressed: 62 160 183;           /* #3EA0B7 */
+    --brand-surface: 22 44 51;             /* #162C33 */
+    --brand-text: 138 214 232;             /* #8AD6E8 */
+    --brand-accent: 86 190 214;
+    --brand-glow: 86 190 214;
 
     /* Accent — instrument amber */
-    --accent-default: 245 166 35;          /* #F5A623 */
-    --accent-surface: 49 36 12;            /* #31240C */
-    --accent-border: 122 90 31;            /* #7A5A1F */
-    --accent-text: 250 198 110;            /* #FAC66E */
+    --accent-default: 240 166 52;          /* #F0A634 */
+    --accent-surface: 46 35 16;            /* #2E2310 */
+    --accent-border: 110 84 36;            /* #6E5424 */
+    --accent-text: 246 196 118;            /* #F6C476 */
 
-    --success-default: 70 165 107;         /* #46A56B */
-    --success-surface: 23 48 33;           /* #173021 */
-    --success-border: 58 111 77;           /* #3A6F4D */
-    --success-text: 156 210 176;           /* #9CD2B0 */
+    --success-default: 76 175 115;         /* #4CAF73 */
+    --success-surface: 22 42 31;           /* #162A1F */
+    --success-border: 48 94 66;            /* #305E42 */
+    --success-text: 150 212 173;           /* #96D4AD */
 
-    --warning-default: 213 143 31;         /* #D58F1F */
-    --warning-surface: 52 40 13;           /* #34280D */
-    --warning-border: 122 94 31;           /* #7A5E1F */
-    --warning-text: 240 204 133;           /* #F0CC85 */
+    --warning-default: 216 150 44;         /* #D8962C */
+    --warning-surface: 45 35 15;           /* #2D230F */
+    --warning-border: 104 80 30;           /* #68501E */
+    --warning-text: 238 202 136;           /* #EECA88 */
 
-    --danger-default: 224 82 76;           /* #E0524C */
-    --danger-surface: 53 22 21;            /* #351615 */
-    --danger-border: 126 40 35;            /* #7E2823 */
-    --danger-text: 240 166 162;            /* #F0A6A2 */
+    --danger-default: 226 92 84;           /* #E25C54 */
+    --danger-surface: 48 22 22;            /* #301616 */
+    --danger-border: 112 44 40;            /* #702C28 */
+    --danger-text: 242 170 165;            /* #F2AAA5 */
 
-    --info-default: 96 148 220;            /* #6094DC */
-    --info-surface: 21 38 66;              /* #152642 */
-    --info-border: 46 79 132;              /* #2E4F84 */
-    --info-text: 166 195 236;              /* #A6C3EC */
+    --info-default: 104 152 222;           /* #6898DE */
+    --info-surface: 22 34 55;              /* #162237 */
+    --info-border: 46 72 116;              /* #2E4874 */
+    --info-text: 170 197 238;              /* #AAC5EE */
 
     /* Chart palette — brightened for dark plot areas. */
     --chart-1: 91 155 213;                 /* #5B9BD5 */
@@ -182,10 +184,10 @@
     --chart-11: 124 166 224;               /* #7CA6E0 */
     --chart-12: 196 154 98;                /* #C49A62 */
 
-    --shadow-z1: 0 1px 2px rgba(0, 0, 0, 0.5);
-    --shadow-z2: 0 2px 6px rgba(0, 0, 0, 0.5);
-    --shadow-z3: 0 6px 16px rgba(0, 0, 0, 0.55), 0 14px 32px rgba(0, 0, 0, 0.45);
-    --shadow-z4: 0 10px 24px rgba(0, 0, 0, 0.6), 0 28px 56px rgba(0, 0, 0, 0.5);
+    --shadow-z1: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --shadow-z2: 0 2px 8px rgba(0, 0, 0, 0.45);
+    --shadow-z3: 0 8px 20px rgba(0, 0, 0, 0.5), 0 16px 40px rgba(0, 0, 0, 0.4);
+    --shadow-z4: 0 12px 28px rgba(0, 0, 0, 0.55), 0 28px 64px rgba(0, 0, 0, 0.45);
     --shadow-glow: 0 0 0 1px rgb(var(--brand-default) / 0.55);
   }
 
@@ -222,7 +224,14 @@
   :focus-visible {
     outline: 2px solid rgb(var(--border-focus));
     outline-offset: 1px;
-    border-radius: 2px;
+  }
+
+  /* Bare `border` utilities pick up the theme's subtle hairline rather
+   * than Tailwind's stock light grey (which glows on the dark theme). */
+  *,
+  ::before,
+  ::after {
+    border-color: rgb(var(--border-subtle));
   }
 
   /* Reduced motion: collapse most transitions per DESIGN_SYSTEM §7. */
@@ -239,14 +248,13 @@
 }
 
 @layer components {
-  /* Micro-label — the Console signature: 10px uppercase letterspaced caps
-   * for panel headers, section eyebrows, and status segments. */
+  /* Section label — the quiet heading used on panel sections, table
+   * column groups and form groups. Sentence case, small, muted. */
   .micro-label {
-    font-size: 10px;
-    line-height: 14px;
+    font-size: 11px;
+    line-height: 16px;
     font-weight: 600;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
+    letter-spacing: 0.01em;
     color: rgb(var(--text-muted));
   }
 
@@ -271,10 +279,37 @@
       linear-gradient(90deg, rgb(var(--border-subtle) / 0.45) 1px, transparent 1px);
     background-size: 32px 32px;
   }
+
+  /* Keyboard hint chip. */
+  .kbd {
+    display: inline-flex;
+    align-items: center;
+    height: 18px;
+    min-width: 18px;
+    justify-content: center;
+    padding: 0 4px;
+    border-radius: 4px;
+    border: 1px solid rgb(var(--border-default));
+    background: rgb(var(--surface-subtle));
+    font-family: var(--font-mono), ui-monospace, monospace;
+    font-size: 10px;
+    color: rgb(var(--text-muted));
+  }
 }
 
 /* Scrollbar styling — subtle, matches surface tokens. */
 @layer utilities {
+  .scrollbar-none {
+    scrollbar-width: none;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+
+  .scrollbar-subtle {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(var(--border-default)) transparent;
+  }
   .scrollbar-subtle::-webkit-scrollbar {
     width: 10px;
     height: 10px;
@@ -315,9 +350,11 @@
   100% { opacity: 1; transform: translateY(0); }
 }
 
+/* Uses the independent `scale` property, not `transform`, so it composes
+ * with centering translates (dialogs) instead of overriding them. */
 @keyframes scale-in {
-  0% { opacity: 0; transform: scale(0.98); }
-  100% { opacity: 1; transform: scale(1); }
+  0% { opacity: 0; scale: 0.98; }
+  100% { opacity: 1; scale: 1; }
 }
 
 @keyframes shimmer {
@@ -328,4 +365,48 @@
 @keyframes led-pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.35; }
+}
+
+/* React Flow chrome (cycle canvas) — the library ships light-only
+ * controls; retint them to the active theme. Deliberately outside any
+ * @layer: Tailwind purges layered rules whose class names never appear in
+ * source, and these are emitted by the library at runtime. */
+.react-flow .react-flow__controls {
+  border: 1px solid rgb(var(--border-subtle));
+  border-radius: 6px;
+  overflow: hidden;
+  box-shadow: var(--shadow-z2) !important;
+}
+.react-flow .react-flow__controls-button {
+  background: rgb(var(--surface-raised)) !important;
+  border-bottom: 1px solid rgb(var(--border-subtle)) !important;
+  color: rgb(var(--text-muted)) !important;
+  fill: currentColor !important;
+  width: 26px !important;
+  height: 26px !important;
+}
+.react-flow .react-flow__controls-button:last-child {
+  border-bottom: 0 !important;
+}
+.react-flow .react-flow__controls-button:hover {
+  background: rgb(var(--surface-subtle)) !important;
+  color: rgb(var(--text-default)) !important;
+}
+.react-flow .react-flow__controls-button svg {
+  fill: currentColor !important;
+  max-width: 11px;
+  max-height: 11px;
+}
+.react-flow .react-flow__minimap {
+  border: 1px solid rgb(var(--border-subtle));
+  border-radius: 6px;
+  overflow: hidden;
+  background: rgb(var(--surface-default)) !important;
+}
+.react-flow .react-flow__attribution {
+  background: transparent !important;
+  color: rgb(var(--text-disabled)) !important;
+}
+.react-flow .react-flow__attribution a {
+  color: inherit !important;
 }

@@ -91,19 +91,17 @@ export function BaseNode({
   const borderClass = hasError
     ? "border-semantic-danger"
     : selected
-      ? "border-brand"
+      ? "border-brand ring-1 ring-brand"
       : "border-border-default";
   const fillClass = hasError
     ? "bg-semantic-danger-surface/40"
-    : selected
-      ? "bg-brand-surface/40"
-      : "bg-surface-raised";
+    : "bg-surface-raised";
 
   return (
     <div
       className={cn(
-        "group min-w-[180px] select-none rounded-sm border shadow-z1 transition-colors duration-fast",
-        "hover:border-brand-hover",
+        "group min-w-[180px] select-none rounded-md border shadow-z2 transition-colors duration-fast",
+        !selected && !hasError && "hover:border-border-strong",
         borderClass,
         fillClass,
       )}
@@ -112,11 +110,11 @@ export function BaseNode({
       {/* Header */}
       <div
         className={cn(
-          "flex items-center gap-2 border-b border-border-subtle px-2 py-1.5",
+          "flex items-center gap-2 rounded-t-md border-b border-border-subtle bg-surface-subtle/60 px-2 py-1.5",
           accent,
         )}
       >
-        <span className="flex h-4 w-4 items-center justify-center text-text-muted transition-transform duration-fast group-hover:scale-110">
+        <span className="flex h-4 w-4 items-center justify-center text-brand">
           {icon}
         </span>
         <span className="text-sm font-semibold text-text leading-none">
@@ -206,7 +204,7 @@ export function BaseNode({
       {/* Post-solve outlet state chips (W-11) */}
       {data.solvedState && (
         <div className="border-t border-brand/20 bg-brand-surface/20 px-2 py-1 font-mono text-[10px] leading-tight">
-          <div className="mb-0.5 text-[9px] font-semibold uppercase tracking-wide text-brand-text/60">
+          <div className="mb-0.5 text-[10px] font-semibold text-brand-text/60">
             outlet state
           </div>
           <div className="grid grid-cols-3 gap-x-1.5 gap-y-0.5">

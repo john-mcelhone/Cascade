@@ -128,7 +128,7 @@ function TrianglePanel({
   return (
     <div className="rounded-md border border-border-subtle bg-surface px-3 py-3">
       <div className="mb-2 flex items-baseline justify-between">
-        <h4 className="text-xs font-medium uppercase tracking-wide text-text-muted">
+        <h4 className="text-xs font-medium text-text-muted">
           {title}
         </h4>
         {tri ? (
@@ -401,7 +401,7 @@ function Arrow({
 function Kv({ k, v }: { k: string; v: string }) {
   return (
     <li className="rounded-sm border border-border-subtle bg-surface-subtle px-1.5 py-1">
-      <div className="text-[10px] uppercase tracking-wide text-text-muted">
+      <div className="text-[11px] text-text-muted">
         {k}
       </div>
       <div className="font-mono tabular-nums">{v}</div>

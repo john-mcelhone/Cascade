@@ -114,7 +114,9 @@ export function CommandPalette() {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent className="max-w-xl p-0 overflow-hidden">
+      {/* Anchored near the top like a launcher; the palette carries its own
+          esc hint, so the dialog's stock close button is hidden. */}
+      <DialogContent className="top-[15%] max-w-xl translate-y-0 overflow-hidden p-0 [&>button:last-child]:hidden">
         <DialogTitle className="sr-only">Command palette</DialogTitle>
         <Command
           className="bg-surface-raised"
@@ -147,7 +149,7 @@ export function CommandPalette() {
 
             <Command.Group
               heading="Navigation"
-              className="px-1 pt-1 pb-2 text-[10px] font-semibold uppercase tracking-caps text-text-muted [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1"
+              className="px-1 pt-1 pb-2 text-[11px] font-semibold text-text-muted [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1"
             >
               {navItems.map((item) => (
                 <PaletteItem
@@ -162,7 +164,7 @@ export function CommandPalette() {
 
             <Command.Group
               heading="Preferences"
-              className="px-1 pt-1 pb-2 text-[10px] font-semibold uppercase tracking-caps text-text-muted [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1"
+              className="px-1 pt-1 pb-2 text-[11px] font-semibold text-text-muted [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1"
             >
               <PaletteItem
                 Icon={Sparkles}
@@ -199,7 +201,7 @@ export function CommandPalette() {
             {projects.length > 0 && (
               <Command.Group
                 heading="Projects"
-                className="px-1 pt-1 pb-2 text-[10px] font-semibold uppercase tracking-caps text-text-muted [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1"
+                className="px-1 pt-1 pb-2 text-[11px] font-semibold text-text-muted [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1"
               >
                 {projects.map((p) => (
                   <PaletteItem
@@ -216,7 +218,7 @@ export function CommandPalette() {
             {projects.length > 0 && (
               <Command.Group
                 heading="Pages"
-                className="px-1 pt-1 pb-2 text-[10px] font-semibold uppercase tracking-caps text-text-muted [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1"
+                className="px-1 pt-1 pb-2 text-[11px] font-semibold text-text-muted [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1"
               >
                 {projects.flatMap((p) => [
                   {

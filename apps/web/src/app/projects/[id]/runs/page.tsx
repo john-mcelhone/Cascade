@@ -41,7 +41,7 @@ export default function RunsPage({ params }: PageProps) {
         ) : (
           <Card className="overflow-hidden">
             <table className="w-full text-sm">
-              <thead className="border-b border-border-subtle bg-surface-subtle text-xs uppercase tracking-wide text-text-muted">
+              <thead className="border-b border-border-subtle bg-surface-subtle text-xs text-text-muted">
                 <tr>
                   <th className="px-3 py-2 text-left font-medium">id</th>
                   <th className="px-3 py-2 text-left font-medium">kind</th>

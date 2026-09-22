@@ -51,11 +51,6 @@ export interface JobState {
 }
 
 export interface UIState {
-  // Left-rail collapsed / expanded.
-  railCollapsed: boolean;
-  setRailCollapsed: (collapsed: boolean) => void;
-  toggleRail: () => void;
-
   // Command palette open state.
   paletteOpen: boolean;
   setPaletteOpen: (open: boolean) => void;
@@ -93,11 +88,6 @@ const idleJob: JobState = {
 export const useUIStore = create<UIState>()(
   persist(
     (set) => ({
-      railCollapsed: false,
-      setRailCollapsed: (collapsed) => set({ railCollapsed: collapsed }),
-      toggleRail: () =>
-        set((s) => ({ railCollapsed: !s.railCollapsed })),
-
       paletteOpen: false,
       setPaletteOpen: (open) => set({ paletteOpen: open }),
 
@@ -121,7 +111,6 @@ export const useUIStore = create<UIState>()(
       name: "cascade.ui",
       // Only persist what's actually a user preference; not in-flight jobs / palette.
       partialize: (s) => ({
-        railCollapsed: s.railCollapsed,
         experience: s.experience,
         onboardingDismissed: s.onboardingDismissed,
         dismissedHints: s.dismissedHints,

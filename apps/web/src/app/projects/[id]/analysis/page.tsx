@@ -156,7 +156,7 @@ export default function AnalysisPage({ params }: PageProps) {
       <div className="flex flex-1 overflow-hidden">
         {/* Left: parameters */}
         <div className="w-[280px] shrink-0 overflow-auto scrollbar-subtle border-r border-border-subtle bg-surface-subtle/30 px-3 py-3">
-          <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-text-muted">
+          <h3 className="mb-2 text-xs font-medium text-text-muted">
             Machine
           </h3>
           <Select
@@ -178,7 +178,7 @@ export default function AnalysisPage({ params }: PageProps) {
             </SelectContent>
           </Select>
 
-          <h3 className="mb-2 mt-4 text-xs font-medium uppercase tracking-wide text-text-muted">
+          <h3 className="mb-2 mt-4 text-xs font-medium text-text-muted">
             Operating point
           </h3>
           <ul className="flex flex-col gap-0.5 text-sm">
@@ -188,7 +188,7 @@ export default function AnalysisPage({ params }: PageProps) {
             <Row k="Tt_in" v="288 K" />
           </ul>
 
-          <h3 className="mb-2 mt-4 text-xs font-medium uppercase tracking-wide text-text-muted">
+          <h3 className="mb-2 mt-4 text-xs font-medium text-text-muted">
             Geometry (from picked candidate)
           </h3>
           <ul className="flex flex-col gap-0.5 text-sm">
@@ -197,7 +197,7 @@ export default function AnalysisPage({ params }: PageProps) {
             <Row k="β_2,rel" v="-55°" />
           </ul>
 
-          <h3 className="mb-2 mt-4 text-xs font-medium uppercase tracking-wide text-text-muted">
+          <h3 className="mb-2 mt-4 text-xs font-medium text-text-muted">
             Loss model
           </h3>
           <Select value={lossModelName} onValueChange={setLossModelName}>
@@ -224,7 +224,7 @@ export default function AnalysisPage({ params }: PageProps) {
 
           {result && (
             <>
-              <h3 className="mb-2 mt-4 text-xs font-medium uppercase tracking-wide text-text-muted">
+              <h3 className="mb-2 mt-4 text-xs font-medium text-text-muted">
                 Results
               </h3>
               <ul className="flex flex-col gap-0.5 text-sm">
@@ -348,7 +348,7 @@ export default function AnalysisPage({ params }: PageProps) {
         <RightRail width={320}>
           <div className="flex flex-col gap-5 p-4">
             <section>
-              <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-text-muted">
+              <h3 className="mb-2 text-xs font-medium text-text-muted">
                 Loss model
               </h3>
               <Card className="space-y-1 p-3 text-sm">
@@ -368,7 +368,7 @@ export default function AnalysisPage({ params }: PageProps) {
               </Card>
             </section>
             <section>
-              <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-text-muted">
+              <h3 className="mb-2 text-xs font-medium text-text-muted">
                 Scale factors
               </h3>
               {scales.length === 0 ? (

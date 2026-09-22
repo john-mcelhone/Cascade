@@ -208,7 +208,7 @@ export default function MapPage({ params }: PageProps) {
               running={running}
             />
           </div>
-          <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-text-muted">
+          <h3 className="mb-2 text-xs font-medium text-text-muted">
             Grid points · {points.length}
           </h3>
           <MapTable points={points} />
@@ -218,7 +218,7 @@ export default function MapPage({ params }: PageProps) {
         <RightRail width={300}>
           <div className="flex flex-col gap-5 p-4">
             <section>
-              <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-text-muted">
+              <h3 className="mb-2 text-xs font-medium text-text-muted">
                 Run controls
               </h3>
               <RunControlsPanel
@@ -229,7 +229,7 @@ export default function MapPage({ params }: PageProps) {
               />
             </section>
             <section>
-              <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-text-muted">
+              <h3 className="mb-2 text-xs font-medium text-text-muted">
                 Codes
               </h3>
               <CodeLegend />

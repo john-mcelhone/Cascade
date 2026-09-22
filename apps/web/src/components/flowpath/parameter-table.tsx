@@ -105,7 +105,7 @@ export function ParameterTable({ projectId }: ParameterTableProps) {
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-center justify-between border-b border-border-subtle px-3 py-2">
-        <h3 className="text-xs font-medium uppercase tracking-wide text-text-muted">
+        <h3 className="text-xs font-medium text-text-muted">
           Parameters
         </h3>
         <Button
@@ -396,7 +396,7 @@ function Table({ projectId, kind, rows }: TableProps) {
     <div role="table" className="w-full text-sm">
       <div
         role="row"
-        className="grid h-6 items-center gap-1 border-b border-border-subtle bg-surface-subtle/60 px-2 text-[10px] uppercase tracking-wide text-text-muted"
+        className="grid h-6 items-center gap-1 border-b border-border-subtle bg-surface-subtle/60 px-2 text-[11px] text-text-muted"
         style={{ gridTemplateColumns: gridTemplate }}
       >
         {table.getHeaderGroups()[0]?.headers.map((header) => (
@@ -567,7 +567,7 @@ function InfoPopover({ parameter }: { parameter: ParameterDef }) {
 function Cell({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex flex-col rounded-sm bg-surface-subtle/40 px-1.5 py-1">
-      <span className="text-[10px] uppercase tracking-wide text-text-muted">
+      <span className="text-[11px] text-text-muted">
         {label}
       </span>
       <span className="tabular-nums">{value}</span>
