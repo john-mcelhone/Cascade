@@ -62,6 +62,9 @@ const config: Config = {
         // Borders
         border: {
           DEFAULT: "rgb(var(--border-default) / <alpha-value>)",
+          // `border-border-default` is used across the app; without this
+          // alias it silently fell through to Tailwind's stock light grey.
+          default: "rgb(var(--border-default) / <alpha-value>)",
           subtle: "rgb(var(--border-subtle) / <alpha-value>)",
           strong: "rgb(var(--border-strong) / <alpha-value>)",
           focus: "rgb(var(--border-focus) / <alpha-value>)",
@@ -177,16 +180,15 @@ const config: Config = {
         "8": "64px",
       },
 
-      // Machined corners — the Console language tops out at 6px. `xl`/`2xl`
-      // are pinned so no surface accidentally reads soft.
+      // Soft-machined corners: 4 px controls, 6–8 px panels and popovers.
       borderRadius: {
         none: "0",
-        sm: "2px",
-        DEFAULT: "2px",
-        md: "3px",
-        lg: "4px",
-        xl: "6px",
-        "2xl": "6px",
+        sm: "4px",
+        DEFAULT: "4px",
+        md: "6px",
+        lg: "8px",
+        xl: "10px",
+        "2xl": "12px",
         full: "9999px",
       },
 
@@ -228,8 +230,8 @@ const config: Config = {
         "8": "2rem",
       },
       height: {
-        topbar: "40px",
-        bottombar: "28px",
+        topbar: "44px",
+        bottombar: "24px",
         "5": "1.25rem",
         "6": "1.5rem",
         "7": "1.75rem",
@@ -254,9 +256,11 @@ const config: Config = {
           "0%": { opacity: "0", transform: "translateY(4px)" },
           "100%": { opacity: "1", transform: "translateY(0)" },
         },
+        // `scale`, not `transform`: composes with a dialog's centering
+        // translate instead of overriding it.
         "scale-in": {
-          "0%": { opacity: "0", transform: "scale(0.98)" },
-          "100%": { opacity: "1", transform: "scale(1)" },
+          "0%": { opacity: "0", scale: "0.98" },
+          "100%": { opacity: "1", scale: "1" },
         },
         "led-pulse": {
           "0%, 100%": { opacity: "1" },

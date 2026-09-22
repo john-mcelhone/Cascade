@@ -20,30 +20,25 @@ export function WelcomeBanner() {
   if (!mounted || dismissed || experience === "expert") return null;
 
   return (
-    <div className="animate-fade-in-up relative mb-5 overflow-hidden rounded-sm border border-brand/40 bg-surface-raised">
-      {/* Panel header strip */}
-      <div className="flex items-center justify-between border-b border-brand/40 bg-brand-surface px-4 py-2">
-        <span className="micro-label !text-brand-text">
-          First run — welcome to Cascade
-        </span>
-        <button
-          type="button"
-          onClick={dismiss}
-          aria-label="Dismiss welcome"
-          className="rounded-sm p-1 text-text-muted transition-colors hover:bg-surface-subtle hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
-        >
-          <X className="h-3.5 w-3.5" />
-        </button>
-      </div>
+    <div className="animate-fade-in-up relative mb-5 rounded-md border border-border-subtle bg-surface p-5">
+      <button
+        type="button"
+        onClick={dismiss}
+        aria-label="Dismiss welcome"
+        className="absolute right-3 top-3 rounded-sm p-1 text-text-muted transition-colors hover:bg-surface-subtle hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+      >
+        <X className="h-4 w-4" />
+      </button>
 
-      <div className="p-4">
-        <h2 className="font-display text-[24px] font-medium leading-tight tracking-[-0.01em] text-text">
-          Let&apos;s get you to <span className="italic">your first result.</span>
+      <div>
+        <p className="text-xs font-medium text-brand-text">Welcome to Cascade</p>
+        <h2 className="mt-1 text-lg font-semibold tracking-tight text-text">
+          Let&apos;s get you to your first result.
         </h2>
         <p className="mt-1 max-w-2xl text-sm leading-relaxed text-text-muted">
           Cascade takes you from a thermodynamic cycle to a validated rotor in
           one browser tab. Pick a starting point — you can change the amount of
-          hand-holding any time from the experience dial in the top bar.
+          hand-holding any time from the experience menu in the top bar.
         </p>
 
         <div className="mt-4 grid gap-3 sm:grid-cols-3">
@@ -63,7 +58,7 @@ export function WelcomeBanner() {
           <button
             type="button"
             onClick={dismiss}
-            className="group flex flex-col items-start gap-1 rounded-sm border border-border-subtle bg-surface p-3 text-left transition-colors hover:border-border-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+            className="group flex flex-col items-start justify-end gap-1 rounded-md border border-border-subtle bg-surface-subtle p-3 text-left transition-colors hover:border-border-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
           >
             <span className="text-sm font-medium text-text">
               I&apos;ll explore myself
@@ -94,17 +89,17 @@ function WelcomeChoice({
   return (
     <Link
       href={href}
-      className={`group flex flex-col items-start gap-1 rounded-sm border p-3 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus ${
+      className={`group flex flex-col items-start gap-1 rounded-md border p-3 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus ${
         primary
           ? "border-brand/40 bg-brand-surface/60 hover:border-brand"
-          : "border-border-subtle bg-surface hover:border-border-strong"
+          : "border-border-subtle bg-surface-subtle hover:border-border-strong"
       }`}
     >
       <span
-        className={`mb-1 flex h-7 w-7 items-center justify-center rounded-sm border ${
+        className={`mb-1 flex h-7 w-7 items-center justify-center rounded-md ${
           primary
-            ? "border-brand/40 bg-brand text-text-inverse"
-            : "border-border-subtle bg-surface-subtle text-text-subtle"
+            ? "bg-brand text-text-inverse"
+            : "bg-border-subtle text-text-subtle"
         }`}
       >
         <Icon className="h-4 w-4" />

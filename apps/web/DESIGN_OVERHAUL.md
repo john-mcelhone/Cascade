@@ -1,3 +1,58 @@
+# Cascade — v0.4 "Workbench"
+
+v0.3 made Cascade look like an instrument; v0.4 makes it *lay out* like one.
+The reference is Blender: a deep, complicated tool that stays legible
+because every pixel has a job and the chrome never competes with the work.
+
+## Layout
+
+- **Workspaces, not pages.** A project's stages — Overview, Cycle, Flow
+  path, Analysis, Map, Rotor, Runs, Settings — are tabs in the 44 px top
+  bar, like Blender's workspace tabs. A project switcher sits beside them.
+  Outside a project the same slot holds Projects / Learn / Docs / Changelog.
+- **No navigation sidebar.** The 224 px left rail duplicated the tabs and
+  breadcrumbs; it is gone, and the width goes to editors. Learn, Docs and
+  What's new live in a help menu and the ⌘K palette.
+- **One-row workspace header.** `PageHeader` is a 44 px toolbar: title,
+  one-line description, actions. Breadcrumbs render only for levels below a
+  workspace (Flow path › Candidate). The experience dial drives the
+  description: wrapped in Guided, inline + truncated in Standard, hidden in
+  Expert.
+- **Status bar.** 24 px: solver state and job progress on the left, live
+  API connectivity and build on the right. The UTC clock and fake identity
+  are gone.
+- **Panels.** `components/ui/panel.tsx` gives editors a consistent header
+  strip (title, meta, tools) and optional disclosure, like a properties
+  editor section. `PropertyRow` renders label/value lists.
+
+## Visual language
+
+- **Graphite / paper.** Neutral greys with a whisper of cool replace the
+  blue-black console. Color is for data, selection (cyan), live state
+  (amber) and status (green/red) only.
+- **Quiet type.** `.micro-label` is sentence case at 11 px; the ~60
+  hand-rolled `uppercase tracking-wide` labels in workspace components were
+  converted. Docs, Learn and the landing page keep their editorial styling.
+- **Controls.** Recessed input fields (hairline edge, brand focus ring),
+  segmented tabs, raised secondary buttons, a visible switch track.
+  Corners soften to 4 px on controls and 6–8 px on panels.
+
+## Fixes found along the way
+
+- `border-border-default` was used across the app but never defined, so
+  those borders fell back to Tailwind's light grey — the harsh white
+  outlines on dark inputs. The token now exists, and bare `border` picks up
+  the theme hairline.
+- The rotor sketch referenced `--semantic-warning-default` (undefined), so
+  unselected bearings drew black.
+- `scale-in` animated `transform`, overriding dialogs' centering translate;
+  it now animates the independent `scale` property.
+- React Flow's controls/minimap were light-only; they are retinted per
+  theme (outside `@layer`, since Tailwind purges layered rules for runtime
+  class names).
+
+---
+
 # Cascade — Design, UI & UX Overhaul (v0.3 "Console")
 
 A collaboration brief, executed: a product designer and an interaction designer

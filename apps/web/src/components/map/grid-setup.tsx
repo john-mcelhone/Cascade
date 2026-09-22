@@ -55,7 +55,7 @@ export function GridSetup({ config, onConfigChange }: GridSetupProps) {
   return (
     <div className="flex flex-col gap-4">
       <section>
-        <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-text-muted">
+        <h3 className="mb-2 text-xs font-medium text-text-muted">
           Variables
         </h3>
         <div className="flex flex-col gap-2">
@@ -70,7 +70,7 @@ export function GridSetup({ config, onConfigChange }: GridSetupProps) {
       </section>
 
       <section>
-        <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-text-muted">
+        <h3 className="mb-2 text-xs font-medium text-text-muted">
           Objective
         </h3>
         <Select
@@ -113,7 +113,7 @@ function VariableRow({
       </div>
       <div className="grid grid-cols-3 gap-1.5">
         <label htmlFor={minId} className="flex flex-col gap-0.5">
-          <span className="text-[10px] uppercase tracking-wide text-text-muted">
+          <span className="text-[11px] text-text-muted">
             min
           </span>
           <Input
@@ -128,7 +128,7 @@ function VariableRow({
           />
         </label>
         <label htmlFor={maxId} className="flex flex-col gap-0.5">
-          <span className="text-[10px] uppercase tracking-wide text-text-muted">
+          <span className="text-[11px] text-text-muted">
             max
           </span>
           <Input
@@ -143,7 +143,7 @@ function VariableRow({
           />
         </label>
         <label htmlFor={ptsId} className="flex flex-col gap-0.5">
-          <span className="text-[10px] uppercase tracking-wide text-text-muted">
+          <span className="text-[11px] text-text-muted">
             points
           </span>
           <Input

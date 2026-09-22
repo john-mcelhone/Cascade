@@ -4,26 +4,26 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
 const buttonVariants = cva(
-  // Base — 28 px tall dense by default, 12 px horizontal padding, 2 px
-  // machined radius, tabular figures inside buttons. Flat fills; state is
-  // carried by color, not shadow or scale.
-  "inline-flex items-center justify-center gap-1.5 rounded-sm border text-sm font-medium tabular-nums whitespace-nowrap transition-[background-color,border-color,color] duration-fast ease-out disabled:pointer-events-none disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:ring-border-focus [&_svg]:size-4 [&_svg]:shrink-0",
+  // Base — 28 px tall dense by default, 4 px radius, tabular figures.
+  // Flat fills; state is carried by color, not shadow or scale.
+  "inline-flex items-center justify-center gap-1.5 rounded-sm border text-sm font-medium select-none tabular-nums whitespace-nowrap transition-[background-color,border-color,color] duration-fast ease-out disabled:pointer-events-none disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:ring-border-focus [&_svg]:size-4 [&_svg]:shrink-0",
   {
     variants: {
       variant: {
         // Solid brand cyan — primary action. Inverse text reads like an
         // illuminated key on the console.
         default:
-          "bg-brand text-text-inverse border-transparent hover:bg-brand-hover active:bg-brand-pressed",
-        // Quiet outlined — secondary action.
+          "bg-brand text-text-inverse border-transparent shadow-z1 hover:bg-brand-hover active:bg-brand-pressed",
+        // Quiet filled — secondary action. Reads as a raised key on the
+        // panel rather than a hollow outline.
         outline:
-          "bg-surface text-text border-border-default hover:bg-surface-subtle hover:border-border-strong",
+          "bg-surface-raised text-text border-border-default shadow-z1 hover:bg-surface-subtle hover:border-border-strong dark:bg-border-subtle dark:hover:bg-border-default/70",
         // Ghost — toolbar / nav buttons; no border.
         ghost:
-          "border-transparent bg-transparent text-text hover:bg-surface-subtle",
+          "border-transparent bg-transparent text-text-subtle hover:bg-border-subtle/70 hover:text-text",
         // Subtle filled — a step quieter than outline; for compact toolbars.
         subtle:
-          "bg-surface-subtle text-text border-transparent hover:bg-brand-surface",
+          "bg-surface-subtle text-text border-transparent hover:bg-border-subtle",
         // Destructive — used on confirm dialogs for destructive verbs.
         destructive:
           "bg-semantic-danger text-text-inverse border-semantic-danger hover:opacity-90",

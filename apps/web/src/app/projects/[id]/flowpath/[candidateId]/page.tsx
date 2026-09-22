@@ -29,6 +29,7 @@ import {
   AlertTriangle,
   ArrowLeft,
   Check,
+  ChevronRight,
   Compass,
   Loader2,
   Pin,
@@ -288,22 +289,21 @@ export default function CandidateDetailPage({ params }: PageProps) {
       {/* Header — mirrors PageHeader's chrome, but the h1 is focusable so
           focus can move to the page heading on navigation (a11y per the
           design notes). */}
-      <div className="flex flex-col gap-2 border-b border-border-subtle bg-surface px-5 py-4">
-        <Breadcrumb
-          items={[
-            { label: "Projects", href: "/projects" },
-            { label: projectName, href: `/projects/${id}` },
-            { label: "Flow path", href: `/projects/${id}/flowpath` },
-            { label: shortId },
-          ]}
-        />
+      <div className="flex shrink-0 flex-col justify-center gap-1 border-b border-border-subtle bg-surface px-4 py-2.5">
         <div className="flex flex-wrap items-center gap-2">
+          <Link
+            href={`/projects/${id}/flowpath`}
+            className="flex items-center gap-1 text-sm text-text-muted transition-colors hover:text-text"
+          >
+            Flow path
+            <ChevronRight className="h-3.5 w-3.5 text-text-disabled" aria-hidden />
+          </Link>
           <h1
             ref={headingRef}
             tabIndex={-1}
-            className="font-mono text-lg font-semibold leading-tight tracking-tight text-text outline-none"
+            className="text-sm font-semibold leading-tight tracking-tight text-text outline-none"
           >
-            Candidate {shortId}
+            Candidate <span className="font-mono">{shortId}</span>
           </h1>
           {candidate && <StatusChip status={candidate.status} />}
           {isPinned && (
@@ -506,7 +506,7 @@ export default function CandidateDetailPage({ params }: PageProps) {
 
 function SectionHeading({ children }: { children: React.ReactNode }) {
   return (
-    <h2 className="mb-1.5 text-xs font-medium uppercase tracking-wide text-text-muted">
+    <h2 className="mb-1.5 text-xs font-medium text-text-muted">
       {children}
     </h2>
   );

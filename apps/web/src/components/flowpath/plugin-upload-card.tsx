@@ -158,7 +158,7 @@ export function PluginUploadCard({ projectId }: Props) {
 
       <div className="mt-4">
         <table className="w-full text-sm">
-          <thead className="text-left text-xs uppercase tracking-wide text-text-muted">
+          <thead className="text-left text-xs text-text-muted">
             <tr>
               <th className="pb-1">Name</th>
               <th className="pb-1">Origin</th>

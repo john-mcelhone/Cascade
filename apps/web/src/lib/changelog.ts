@@ -37,6 +37,21 @@ export const CATEGORY_LABEL: Record<ChangeCategory, string> = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: "2026-09-22",
+    title: "Workbench: a desktop-tool layout for the workspace",
+    category: "design",
+    summary:
+      "The app now lays out like a professional desktop tool. Project stages are tabs in the top bar, the navigation sidebar is gone, and the window below belongs to the work.",
+    details: [
+      "Workspace tabs (Overview, Cycle, Flow path, Analysis, Map, Rotor, Runs, Settings) and a project switcher replace the left rail and duplicated breadcrumbs.",
+      "Page headers collapse to one 44 px toolbar row; descriptions follow the experience level (full in Guided, inline in Standard, hidden in Expert).",
+      "Neutral graphite / paper palette, recessed input fields, segmented tabs, and quiet sentence-case section labels.",
+      "Project overview rebuilt as a five-stage design pipeline with per-stage run status and a properties inspector.",
+      "Status bar shows live API connectivity; the cycle canvas re-frames the graph above the result panel after a run.",
+      "Fixes: undefined border token that rendered light outlines on dark, black bearing markers on the rotor sketch, and off-centre dialogs.",
+    ],
+  },
+  {
     date: "2026-06-10",
     title: "Manufacturable impeller geometry",
     category: "fix",

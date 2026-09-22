@@ -1,105 +1,111 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { X } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { useUIStore } from "@/lib/stores/ui-store";
-import { useMounted } from "@/lib/hooks/use-mounted";
-import { fmtNumber } from "@/lib/utils";
+import { getApiClient } from "@/lib/api/client";
+import { cn, fmtNumber } from "@/lib/utils";
 
 /**
- * Bottom bar — a 28 px status ticker, segmented by hairlines.
- * Left: solver LED + state; running jobs show iteration, residual, progress,
- * cancel. Right: build, UTC clock, identity — all in mono.
+ * Status bar — 24 px, like a desktop app's. Left: solver state, and while a
+ * job runs its iteration, residual, progress and a cancel. Right: whether
+ * the API is reachable, and the build.
  */
 export function BottomBar() {
   const job = useUIStore((s) => s.job);
   const resetJob = useUIStore((s) => s.resetJob);
-
   const isRunning = job.status === "running";
 
   return (
-    <footer className="flex h-bottombar shrink-0 items-stretch border-t border-border-subtle bg-surface text-xs">
-      {/* Solver segment */}
-      <div className="flex items-center gap-2 border-r border-border-subtle px-3">
+    <footer className="flex h-bottombar shrink-0 items-center gap-4 border-t border-border-subtle bg-surface px-3 text-[11px] text-text-muted">
+      <span className="flex items-center gap-1.5">
         <span
-          className={
-            isRunning
-              ? "led led-pulse bg-accent"
-              : "led bg-border-strong"
-          }
           aria-hidden
+          className={cn(
+            "led",
+            isRunning ? "led-pulse bg-accent" : "bg-border-strong",
+          )}
         />
-        <span className="micro-label !text-text-subtle">
-          {isRunning ? "Solver running" : "Solver idle"}
+        <span className={isRunning ? "text-text" : undefined}>
+          {isRunning ? job.label || "Solver running" : "Ready"}
         </span>
-      </div>
+      </span>
 
       {isRunning && (
-        <div className="flex items-center gap-3 border-r border-border-subtle px-3">
-          <span className="font-medium text-text">{job.label}</span>
-          {job.detail && <span className="text-text-muted">{job.detail}</span>}
+        <span className="flex min-w-0 items-center gap-3">
+          {job.detail && <span className="truncate">{job.detail}</span>}
           {job.iteration > 0 && (
-            <span className="font-mono text-text-muted">
-              iter {job.iteration}
-            </span>
+            <span className="font-mono">iter {job.iteration}</span>
           )}
           {job.residual !== null && (
-            <span className="font-mono text-text-muted">
+            <span className="font-mono">
               res {fmtNumber(job.residual, { sigFigs: 3 })}
             </span>
           )}
-          <div className="h-1 w-32 overflow-hidden rounded-full bg-surface-subtle">
-            <div
-              className="h-full bg-accent transition-[width] duration-base ease-out"
+          <span className="h-1 w-28 overflow-hidden rounded-full bg-border-subtle">
+            <span
+              className="block h-full bg-accent transition-[width] duration-base ease-out"
               style={{ width: `${Math.round((job.progress || 0) * 100)}%` }}
             />
-          </div>
-          <Button
-            variant="ghost"
-            size="sm"
+          </span>
+          <button
+            type="button"
             onClick={resetJob}
-            className="h-5 px-1.5 text-text-muted hover:text-semantic-danger"
             aria-label="Cancel job"
+            className="flex items-center gap-1 rounded-sm px-1 hover:text-semantic-danger"
           >
             <X className="h-3 w-3" />
             Cancel
-          </Button>
-        </div>
+          </button>
+        </span>
       )}
 
-      <div className="ml-auto flex items-stretch">
-        <span className="flex items-center border-l border-border-subtle px-3 font-mono text-text-muted">
-          v0.1.0
-        </span>
-        <UtcClock />
-        <span className="flex items-center border-l border-border-subtle px-3 font-mono text-text-muted">
-          user@local
-        </span>
-      </div>
+      <span className="ml-auto flex items-center gap-4">
+        <ApiStatus />
+        <span className="font-mono">v0.1.0</span>
+      </span>
     </footer>
   );
 }
 
-/** Live UTC readout — instrument chrome; renders a placeholder until mounted
- *  so SSR markup matches. */
-function UtcClock() {
-  const mounted = useMounted();
-  const [now, setNow] = useState("");
+/** Polls /api/health so a dead backend is visible at a glance, not only
+ *  as a one-off toast. */
+function ApiStatus() {
+  const { data, isError, isPending } = useQuery({
+    queryKey: ["health"],
+    queryFn: () => getApiClient().health(),
+    refetchInterval: 15_000,
+    retry: false,
+  });
 
-  useEffect(() => {
-    if (!mounted) return;
-    const tick = () =>
-      setNow(new Date().toISOString().slice(11, 19));
-    tick();
-    const id = setInterval(tick, 1000);
-    return () => clearInterval(id);
-  }, [mounted]);
-
+  const state = isPending
+    ? "checking"
+    : isError || !data
+      ? "offline"
+      : "online";
   return (
-    <span className="hidden items-center gap-1.5 border-l border-border-subtle px-3 font-mono text-text-muted sm:flex">
-      <span data-numeric>{mounted && now ? now : "--:--:--"}</span>
-      <span className="text-[10px] text-text-disabled">UTC</span>
+    <span
+      className="flex items-center gap-1.5"
+      title={
+        state === "offline"
+          ? "Start the API with `make api` (port 8000)"
+          : undefined
+      }
+    >
+      <span
+        aria-hidden
+        className={cn(
+          "led",
+          state === "online" && "bg-semantic-success",
+          state === "offline" && "bg-semantic-danger",
+          state === "checking" && "bg-border-strong",
+        )}
+      />
+      {state === "online"
+        ? "API connected"
+        : state === "offline"
+          ? "API offline"
+          : "Connecting…"}
     </span>
   );
 }

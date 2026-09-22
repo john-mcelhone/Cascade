@@ -31,7 +31,7 @@ export function CompliancePanel({ compliance }: CompliancePanelProps) {
     return (
       <Card>
         <CardHeader className="p-3 pb-1">
-          <CardTitle className="text-sm font-medium uppercase tracking-wide text-text-muted">
+          <CardTitle className="text-sm font-medium text-text-muted">
             API 684 compliance
           </CardTitle>
         </CardHeader>
@@ -46,7 +46,7 @@ export function CompliancePanel({ compliance }: CompliancePanelProps) {
     return (
       <Card>
         <CardHeader className="p-3 pb-1">
-          <CardTitle className="text-sm font-medium uppercase tracking-wide text-text-muted">
+          <CardTitle className="text-sm font-medium text-text-muted">
             API 684 compliance
           </CardTitle>
         </CardHeader>
@@ -65,7 +65,7 @@ export function CompliancePanel({ compliance }: CompliancePanelProps) {
     <Card>
       <CardHeader className="p-3 pb-1">
         <div className="flex items-baseline justify-between">
-          <CardTitle className="text-sm font-medium uppercase tracking-wide text-text-muted">
+          <CardTitle className="text-sm font-medium text-text-muted">
             API 684 compliance
           </CardTitle>
           <span className="text-[11px] text-text-muted">
@@ -150,7 +150,7 @@ function CriticalRow({
             side="top"
             align="end"
           >
-            <p className="mb-1 text-[11px] font-medium uppercase tracking-wide text-text-muted">
+            <p className="mb-1 text-[11px] font-medium text-text-muted">
               {c.api_clause}
             </p>
             <p className="text-text">{c.api_citation}</p>

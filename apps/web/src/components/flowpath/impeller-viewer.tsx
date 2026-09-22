@@ -507,7 +507,7 @@ function Hud({
       role="status"
       aria-live="polite"
     >
-      <div className="mb-1 text-[10px] uppercase tracking-wide text-text-muted">
+      <div className="mb-1 text-[11px] text-text-muted">
         Picked candidate
       </div>
       <table className="w-full font-mono">
@@ -721,7 +721,7 @@ export function DownloadStrip({ pickedId }: { pickedId: string | null }) {
 
   return (
     <div
-      className="flex items-center gap-1 border-t border-border-subtle bg-surface-subtle/30 px-2 py-1.5"
+      className="flex flex-wrap items-center gap-1 border-t border-border-subtle bg-surface-subtle/30 px-2 py-1.5"
       aria-label="Download options for the picked candidate"
     >
       <DownloadButton

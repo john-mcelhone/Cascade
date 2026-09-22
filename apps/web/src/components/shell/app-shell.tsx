@@ -2,7 +2,6 @@
 
 import { usePathname } from "next/navigation";
 import { TopBar } from "./top-bar";
-import { LeftRail } from "./left-rail";
 import { BottomBar } from "./bottom-bar";
 import { CommandPalette } from "@/components/command-palette";
 
@@ -54,10 +53,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex h-screen flex-col">
       <TopBar />
-      <div className="flex flex-1 overflow-hidden">
-        <LeftRail />
-        <main className="flex-1 overflow-auto scrollbar-subtle">{children}</main>
-      </div>
+      {/* No navigation sidebar: workspaces are tabs in the top bar, and the
+          whole window below it belongs to the work. */}
+      <main className="flex-1 overflow-auto scrollbar-subtle">{children}</main>
       <BottomBar />
       <CommandPalette />
     </div>

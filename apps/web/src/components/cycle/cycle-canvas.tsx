@@ -354,6 +354,25 @@ function Inner({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [result]);
 
+  // When a result lands, the result panel docks over the bottom of the
+  // canvas (and the T–s drawer may open). Re-frame the graph into the space
+  // that's left so no component hides behind the panel.
+  React.useEffect(() => {
+    if (!result) return;
+    const id = window.setTimeout(() => {
+      const panel = containerRef.current?.querySelector<HTMLElement>(
+        "[data-cycle-result-panel]",
+      );
+      const bottom = (panel?.offsetHeight ?? 0) + 32;
+      void reactFlow.fitView({
+        padding: { top: "56px", bottom: `${bottom}px`, left: "48px", right: "48px" },
+        maxZoom: 1.2,
+        duration: 300,
+      });
+    }, 80);
+    return () => window.clearTimeout(id);
+  }, [result, reactFlow]);
+
   // Mark nodes as selected for visual feedback (React Flow already does
   // this via the `selected` prop on the node component).
   React.useEffect(() => {
@@ -394,20 +413,17 @@ function Inner({
           >
             <Background
               variant={BackgroundVariant.Dots}
-              gap={8}
-              size={1}
-              color="rgb(var(--border-subtle) / 0.85)"
+              gap={16}
+              size={1.2}
+              color="rgb(var(--border-default))"
             />
-            <Controls
-              showInteractive={false}
-              className="!rounded-sm !border !border-border-subtle !bg-surface-raised !shadow-z1"
-            />
+            <Controls showInteractive={false} />
             <MiniMap
               pannable
               zoomable
               nodeStrokeWidth={2}
-              maskColor="rgb(var(--background) / 0.6)"
-              className="!rounded-sm !border !border-border-subtle !bg-surface-raised !shadow-z1"
+              nodeBorderRadius={3}
+              maskColor="rgb(var(--background) / 0.55)"
               nodeColor={(n) => nodeMiniColor(n.type)}
             />
           </ReactFlow>

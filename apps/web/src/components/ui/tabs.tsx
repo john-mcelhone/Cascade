@@ -13,7 +13,7 @@ const TabsList = React.forwardRef<
   <TabsPrimitive.List
     ref={ref}
     className={cn(
-      "inline-flex h-7 items-center gap-1 rounded-sm border border-border-subtle bg-surface-subtle p-0.5 text-text-muted",
+      "inline-flex h-7 items-center gap-0.5 rounded-md border border-border-subtle bg-surface-subtle p-0.5 text-text-muted",
       className,
     )}
     {...props}
@@ -28,10 +28,11 @@ const TabsTrigger = React.forwardRef<
   <TabsPrimitive.Trigger
     ref={ref}
     className={cn(
-      "inline-flex h-6 items-center justify-center whitespace-nowrap rounded-sm px-2 text-sm font-medium",
+      "inline-flex h-[22px] items-center justify-center gap-1.5 whitespace-nowrap rounded-[4px] px-2.5 text-xs font-medium",
       "transition-colors duration-fast",
-      // Active tab: raised fill plus a 2px brand underline — instrument-style.
-      "data-[state=active]:bg-surface-raised data-[state=active]:text-text data-[state=active]:shadow-[inset_0_-2px_0_rgb(var(--brand-default))]",
+      // Active segment: lifted fill, like a pressed-in toggle on a toolbar.
+      "data-[state=active]:bg-surface-raised data-[state=active]:text-text data-[state=active]:shadow-z1",
+      "dark:data-[state=active]:bg-border-default/70",
       "hover:text-text",
       "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus",
       "disabled:pointer-events-none disabled:opacity-50",

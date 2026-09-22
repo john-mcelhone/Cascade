@@ -367,7 +367,7 @@ export function ModeShapes({ modes, shape }: ModeShapesProps) {
       {/* Toolbar row */}
       <div className="flex flex-wrap items-center justify-between gap-2 px-2 pt-1">
         <div className="flex items-center gap-2">
-          <label className="text-[10px] uppercase tracking-wide text-text-muted">
+          <label className="text-[11px] text-text-muted">
             Mode
           </label>
           <select
@@ -392,7 +392,7 @@ export function ModeShapes({ modes, shape }: ModeShapesProps) {
           {/* Speed multiplier slider — only show when animation is available */}
           {canAnimate && playing && (
             <div className="flex items-center gap-2">
-              <span className="text-[10px] uppercase tracking-wide text-text-muted">
+              <span className="text-[11px] text-text-muted">
                 Speed
               </span>
               <Slider
@@ -468,7 +468,7 @@ export function ModeShapes({ modes, shape }: ModeShapesProps) {
                 </span>
               )}
               {summary.whirl && (
-                <span className="rounded-sm border border-border-subtle bg-surface-subtle px-1.5 py-0.5 text-[10px] uppercase tracking-wide">
+                <span className="rounded-sm border border-border-subtle bg-surface-subtle px-1.5 py-0.5 text-[11px]">
                   {summary.whirl}
                 </span>
               )}

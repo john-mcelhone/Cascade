@@ -121,7 +121,10 @@ export function ResultPanel({ nodes }: ResultPanelProps) {
   }
 
   return (
-    <div className="pointer-events-auto absolute inset-x-3 bottom-3 z-10 rounded-md border border-border-subtle bg-surface-raised shadow-z2">
+    <div
+      data-cycle-result-panel
+      className="pointer-events-auto absolute inset-x-3 bottom-3 z-10 rounded-md border border-border-subtle bg-surface-raised shadow-z2"
+    >
       <div className="flex items-center justify-between border-b border-border-subtle px-3 py-2">
         <div className="flex items-center gap-2">
           <Badge variant="success">converged</Badge>
@@ -260,7 +263,7 @@ export function ResultPanel({ nodes }: ResultPanelProps) {
             mean-line was requested or a fallback occurred. */}
         {showEfficiencySources(result) && (
           <div className="border-t border-border-subtle px-3 pb-3">
-            <div className="mb-1.5 mt-2 text-xs font-medium uppercase tracking-wide text-text-muted">
+            <div className="mb-1.5 mt-2 text-xs font-medium text-text-muted">
               Efficiency sources
             </div>
             <div className="flex flex-col gap-1.5">
@@ -320,7 +323,7 @@ function Metric({
     <div className="rounded-sm border border-border-subtle bg-surface px-2 py-1.5">
       <div
         title={hint}
-        className="font-mono text-[10px] uppercase tracking-wide text-text-muted"
+        className="font-mono text-[11px] text-text-muted"
       >
         {label}
       </div>
@@ -382,6 +385,7 @@ function FailurePanel({
 
   return (
     <div
+      data-cycle-result-panel
       className={`pointer-events-auto absolute inset-x-3 bottom-3 z-10 rounded-md border ${borderClass} ${bgClass} shadow-z2`}
     >
       <div
@@ -437,7 +441,7 @@ function FailurePanel({
           {/* Suggestions */}
           {failure.suggestions.length > 0 && (
             <div>
-              <div className="mb-1.5 text-xs font-medium uppercase tracking-wide text-text-muted">
+              <div className="mb-1.5 text-xs font-medium text-text-muted">
                 {isBug ? "What to do" : "Things to try"}
               </div>
               <ul className="flex flex-col gap-1.5 text-sm text-text">
@@ -464,7 +468,7 @@ function FailurePanel({
           {isBug && failure.bug_log && (
             <div>
               <div className="mb-1.5 flex items-center justify-between">
-                <div className="text-xs font-medium uppercase tracking-wide text-text-muted">
+                <div className="text-xs font-medium text-text-muted">
                   Bug log
                 </div>
                 <Button
